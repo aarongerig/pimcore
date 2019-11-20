@@ -135,7 +135,7 @@
     "google_api_access_description": "Wymagane dla integracji z Google API. Używaj wyłącznie 'kont usług' (Service Account) z konsoli Google API Console",
     "absolute_path_to_icc_rgb_profile": "Ścieżka bezwzględna do profilu koloru ICC RGB",
     "absolute_path_to_icc_cmyk_profile": "Ścieżka bezwzględna do profilu koloru ICC CMYK",
-    "upload_path": "Ścieźka Uploadu",
+    "upload_path": "Ścieżka uploadu",
     "selection_options": "Opcje zaznaczenia",
     "expiry": "Wygaśnięcie",
     "mobile": "Mobilne",
@@ -709,5 +709,11 @@
     "invert_colors_on_login_screen": "Invert Colors on Login Screen",
     "activate_column_configuration": "Activate Column Configuration",
     "table_column_configuration": "Column Configuration",
-    "delete_language_note": "Note: Removing language from the list will not delete its respective data. Please use console command 'pimcore:locale:delete-unused-tables' for cleanup."
+    "delete_language_note": "Note: Removing language from the list will not delete its respective data. Please use console command 'pimcore:locale:delete-unused-tables' for cleanup.",
+    "send_invitation_link": "Send Invitation Link",
+    "invitation_sent": "Login Invitation sent",
+    "invitation_link_sent": "A temporary login link has been sent to email address: \"%s\" ",
+    "geopolyline": "Geographic Polyline",
+    "classificationstore_error_group_exists_msg": "Group with this name already exists",
+    "classificationstore_group_by_key": "Group by key"
 }

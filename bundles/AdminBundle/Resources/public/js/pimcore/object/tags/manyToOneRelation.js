@@ -27,7 +27,7 @@ pimcore.object.tags.manyToOneRelation = Class.create(pimcore.object.tags.abstrac
         }
         this.fieldConfig = fieldConfig;
 
-        this.fieldConfig.classes =  this.fieldConfig.classes.filter(x => {
+        this.fieldConfig.classes =  this.fieldConfig.classes.filter(function (x) {
             if(x.classes == 'folder') {
                 this.dataObjectFolderAllowed = true;
                 return false;
@@ -324,7 +324,7 @@ pimcore.object.tags.manyToOneRelation = Class.create(pimcore.object.tags.abstrac
             allowedSubtypes.object = [];
             if (this.fieldConfig.classes != null && this.fieldConfig.classes.length > 0) {
                 allowedSpecific.classes = [];
-                allowedSubtypes.object.push("object");
+                allowedSubtypes.object.push("object", "variant");
                 for (i = 0; i < this.fieldConfig.classes.length; i++) {
                     allowedSpecific.classes.push(this.fieldConfig.classes[i].classes);
 
@@ -459,13 +459,6 @@ pimcore.object.tags.manyToOneRelation = Class.create(pimcore.object.tags.abstrac
             }
         }
         return isAllowed;
-    },
-
-    isInvalidMandatory: function () {
-        if (this.data.id) {
-            return false;
-        }
-        return true;
     },
 
     requestNicePathData: function () {

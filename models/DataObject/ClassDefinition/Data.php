@@ -18,6 +18,7 @@ namespace Pimcore\Model\DataObject\ClassDefinition;
 
 use Pimcore\Model;
 use Pimcore\Model\DataObject;
+use Pimcore\Model\DataObject\Exception\InheritanceParentNotFoundException;
 
 abstract class Data
 {
@@ -1179,6 +1180,17 @@ abstract class Data
                     if ($object instanceof DataObject\Concrete) {
                         $containerGetter = 'get' . ucfirst($fieldname);
                         $container = $object->$containerGetter();
+                        if (!$container && $context['containerType'] == 'block') {
+                            // no data, so check if inheritance is enabled + there is parent value
+                            if ($object->getClass()->getAllowInherit()) {
+                                try {
+                                    $container = $object->getValueFromParent($fieldname);
+                                } catch (InheritanceParentNotFoundException $e) {
+                                    //nothing to do here - just no parent data available
+                                }
+                            }
+                        }
+
                         if ($container) {
                             $originalIndex = $context['oIndex'];
 
@@ -1317,7 +1329,7 @@ abstract class Data
      */
     public function marshal($value, $object = null, $params = [])
     {
-        if ($params['raw']) {
+        if (isset($params['raw']) && $params['raw']) {
             return $value;
         } else {
             return ['value' => $value];

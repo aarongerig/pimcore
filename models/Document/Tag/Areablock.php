@@ -583,7 +583,7 @@ class Areablock extends Model\Document\Tag implements BlockInterface
      */
     public function getFromWebserviceImport($wsElement, $document = null, $params = [], $idMapper = null)
     {
-        $data = $wsElement->value;
+        $data = $this->sanitizeWebserviceData($wsElement->value);
         if (($data->indices === null || is_array($data->indices)) && ($data->current == null || is_numeric($data->current))
             && ($data->currentIndex == null || is_numeric($data->currentIndex))) {
             $indices = $data->indices;
@@ -604,7 +604,7 @@ class Areablock extends Model\Document\Tag implements BlockInterface
      */
     public function getElement(string $name)
     {
-        $document = Model\Document::getById($this->getDocumentId());
+        $document = $this->getDocument();
 
         $parentBlockNames = $this->getParentBlockNames();
         $parentBlockNames[] = $this->getName();

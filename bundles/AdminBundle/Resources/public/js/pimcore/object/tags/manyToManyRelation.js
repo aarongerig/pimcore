@@ -26,7 +26,7 @@ pimcore.object.tags.manyToManyRelation = Class.create(pimcore.object.tags.abstra
 
         this.fieldConfig = fieldConfig;
 
-        this.fieldConfig.classes =  this.fieldConfig.classes.filter(x => {
+        this.fieldConfig.classes =  this.fieldConfig.classes.filter(function (x) {
             if(x.classes == 'folder') {
                 this.dataObjectFolderAllowed = true;
                 return false;
@@ -186,7 +186,7 @@ pimcore.object.tags.manyToManyRelation = Class.create(pimcore.object.tags.abstra
                 markDirty: false,
                 plugins: {
                     ptype: 'gridviewdragdrop',
-                    dragroup: 'element'
+                    draggroup: 'element'
                 },
                 listeners: {
                     refresh: function (gridview) {
@@ -402,6 +402,7 @@ pimcore.object.tags.manyToManyRelation = Class.create(pimcore.object.tags.abstra
             style: "margin-bottom: 10px",
             title: this.fieldConfig.title,
             viewConfig: {
+            enableTextSelection: true,
                 listeners: {
                     refresh: function (gridview) {
                         this.requestNicePathData(this.store.data);
@@ -484,7 +485,7 @@ pimcore.object.tags.manyToManyRelation = Class.create(pimcore.object.tags.abstra
             allowedSubtypes.object = [];
             if (this.fieldConfig.classes != null && this.fieldConfig.classes.length > 0) {
                 allowedSpecific.classes = [];
-                allowedSubtypes.object.push("object");
+                allowedSubtypes.object.push("object", "variant");
                 for (i = 0; i < this.fieldConfig.classes.length; i++) {
                     allowedSpecific.classes.push(this.fieldConfig.classes[i].classes);
 
@@ -589,18 +590,6 @@ pimcore.object.tags.manyToManyRelation = Class.create(pimcore.object.tags.abstra
     removeElement: function (index, item) {
         this.getStore().removeAt(index);
         item.parentMenu.destroy();
-    },
-
-
-    isInvalidMandatory: function () {
-
-        var data = this.store.queryBy(function (record, id) {
-            return true;
-        });
-        if (data.items.length < 1) {
-            return true;
-        }
-        return false;
     },
 
     getValue: function () {

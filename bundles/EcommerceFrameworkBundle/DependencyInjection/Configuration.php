@@ -18,6 +18,7 @@ declare(strict_types=1);
 namespace Pimcore\Bundle\EcommerceFrameworkBundle\DependencyInjection;
 
 use Pimcore\Bundle\CoreBundle\DependencyInjection\Config\Processor\PlaceholderProcessor;
+use Pimcore\Bundle\EcommerceFrameworkBundle\CartManager\AbstractCart;
 use Pimcore\Bundle\EcommerceFrameworkBundle\CartManager\Cart;
 use Pimcore\Bundle\EcommerceFrameworkBundle\CartManager\CartFactory;
 use Pimcore\Bundle\EcommerceFrameworkBundle\CartManager\CartPriceCalculator;
@@ -284,7 +285,8 @@ class Configuration implements ConfigurationInterface
                                     ->end()
                                     ->append($this->buildOptionsNode('factory_options', [
                                         'cart_class_name' => Cart::class,
-                                        'guest_cart_class_name' => SessionCart::class
+                                        'guest_cart_class_name' => SessionCart::class,
+                                        'cart_readonly_mode' => AbstractCart::CART_READ_ONLY_MODE_STRICT
                                     ]))
                                 ->end()
                             ->end()
@@ -760,7 +762,22 @@ class Configuration implements ConfigurationInterface
                             // check if all search attributes are defined as attribute
                             foreach ($v as $tenant => $tenantConfig) {
                                 foreach ($tenantConfig['search_attributes'] as $searchAttribute) {
-                                    if (!isset($tenantConfig['attributes'][$searchAttribute])) {
+                                    $attributeFound = false;
+                                    if (isset($tenantConfig['attributes'][$searchAttribute])) {
+                                        $attributeFound = true;
+                                    }
+
+                                    $delimiters = ['.', '^'];
+                                    foreach ($delimiters as $delimiter) {
+                                        if (!$attributeFound && strpos($searchAttribute, $delimiter) !== false) {
+                                            $fieldNameParts = explode($delimiter, $searchAttribute);
+                                            if (isset($tenantConfig['attributes'][$fieldNameParts[0]])) {
+                                                $attributeFound = true;
+                                            }
+                                        }
+                                    }
+
+                                    if (!$attributeFound) {
                                         throw new InvalidConfigurationException(sprintf(
                                             'The search attribute "%s" in product index tenant "%s" is not defined as attribute.',
                                             $searchAttribute,

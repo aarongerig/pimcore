@@ -132,6 +132,12 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
     },
 
     checkForInheritance: function () {
+
+        // do not run when tab is not active
+        if(document.hidden) {
+            return;
+        }
+
         if (!this.edit.layout.rendered) {
             throw "edit not available";
         }
@@ -212,7 +218,7 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
             pimcore.plugin.broker.fireEvent("postOpenObject", this, "object");
 
             if(this.options && this.options['uiState']) {
-                this.setUiState(this.tab, this.options['uiState']);
+                this.setUiState(this.tabbar, this.options['uiState']);
             }
         }.bind(this, tabId));
 
@@ -361,7 +367,7 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
                 iconCls: "pimcore_icon_save_white",
                 cls: "pimcore_save_button",
                 scale: "medium",
-                handler: this.save.bind(this, "unpublish"),
+                handler: this.save.bind(this, "version"),
                 menu: [{
                     text: t('save_close'),
                     iconCls: "pimcore_icon_save",
@@ -503,6 +509,15 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
                             window.open(path);
                         });
                     }.bind(this)
+                });
+            }
+
+            if (pimcore.globalmanager.get("user").isAllowed('notifications_send')) {
+                buttons.push({
+                    tooltip: t('share_via_notifications'),
+                    iconCls: "pimcore_icon_share",
+                    scale: "medium",
+                    handler: this.shareViaNotifications.bind(this)
                 });
             }
 
@@ -754,10 +769,6 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
                                 // for internal use ID.
                                 pimcore.eventDispatcher.fireEvent("postSaveObject", this, task);
                             }
-                            else {
-                                pimcore.helpers.showPrettyError(rdata.type, t("error"), t("saving_failed"),
-                                    rdata.message, rdata.stack, rdata.code);
-                            }
                         } catch (e) {
                             pimcore.helpers.showNotification(t("error"), t("saving_failed"), "error");
                         }
@@ -811,12 +822,15 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
         params = params || {};
         var uiState = null;
 
-        if(!params['layoutId']) {
+        // Reload layout when explicitly set to false
+        if (params['layoutId'] === false) {
+            params['layoutId'] = null;
+        } else if (!params['layoutId']) {
             params['layoutId'] = this.data.currentLayoutId;
         }
 
         if(this.data.currentLayoutId == params['layoutId'] && !params['ignoreUiState']) {
-            uiState = this.getUiState(this.tab);
+            uiState = this.getUiState(this.tabbar);
         }
 
         this.tab.on("close", function () {
@@ -941,5 +955,19 @@ pimcore.object.object = Class.create(pimcore.object.abstract, {
                 }
             }.bind(this));
         }
+    },
+
+    shareViaNotifications: function () {
+        if (pimcore.globalmanager.get("user").isAllowed('notifications_send')) {
+            var elementData = {
+                id:this.id,
+                type:'object',
+                published:this.data.general.o_published,
+                path:this.data.general.fullpath
+            };
+            if (pimcore.globalmanager.get("new_notifications")) {
+                pimcore.globalmanager.get("new_notifications").getWindow().destroy();
+            }
+            pimcore.globalmanager.add("new_notifications", new pimcore.notification.modal(elementData));        }
     }
 });

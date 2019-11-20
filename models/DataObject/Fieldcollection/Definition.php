@@ -288,6 +288,15 @@ class Definition extends Model\AbstractModel
             throw new \Exception('A field-collection needs a key to be saved!');
         }
 
+        if (!preg_match('/[a-zA-Z]+/', $this->getKey())) {
+            throw new \Exception(sprintf('Invalid key for field-collection: %s', $this->getKey()));
+        }
+
+        if ($this->getParentClass() && !preg_match('/^[a-zA-Z_\x7f-\xff\\\][a-zA-Z0-9_\x7f-\xff\\\]*$/', $this->getParentClass())) {
+            throw new \Exception(sprintf('Invalid parentClass value for class definition: %s',
+                $this->getParentClass()));
+        }
+
         $infoDocBlock = $this->getInfoDocBlock();
 
         $definitionFile = $this->getDefinitionFile();
@@ -449,15 +458,32 @@ class Definition extends Model\AbstractModel
         $cd .= "\n\n";
         $cd .= "Fields Summary: \n";
 
-        if (is_array($this->getFieldDefinitions())) {
-            foreach ($this->getFieldDefinitions() as $fd) {
-                $cd .= ' - ' . $fd->getName() . ' [' . $fd->getFieldtype() . "]\n";
-            }
-        }
+        $cd = $this->getInfoDocBlockForFields($this, $cd, 1);
 
         $cd .= '*/ ';
 
         return $cd;
+    }
+
+    /**
+     * @param $definition
+     * @param $text
+     * @param $level
+     *
+     * @return string
+     */
+    protected function getInfoDocBlockForFields($definition, $text, $level)
+    {
+        if (is_array($definition->getFieldDefinitions())) {
+            foreach ($definition->getFieldDefinitions() as $fd) {
+                $text .= str_pad('', $level, '-') . ' ' . $fd->getName() . ' [' . $fd->getFieldtype() . "]\n";
+                if (method_exists($fd, 'getFieldDefinitions')) {
+                    $text = $this->getInfoDocBlockForFields($fd, $text, $level + 1);
+                }
+            }
+        }
+
+        return $text;
     }
 
     /**

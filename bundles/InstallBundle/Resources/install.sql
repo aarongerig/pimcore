@@ -20,7 +20,7 @@ CREATE TABLE `application_logs` (
   KEY `timestamp` (`timestamp`),
   KEY `relatedobject` (`relatedobject`),
   KEY `priority` (`priority`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4;
+) DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `assets`;
 CREATE TABLE `assets` (
@@ -73,7 +73,7 @@ CREATE TABLE `cache_tags` (
   PRIMARY KEY (`id`,`tag`),
   INDEX `id` (`id`),
   INDEX `tag` (`tag`)
-) ENGINE=MEMORY;
+) DEFAULT CHARSET=ascii;
 
 DROP TABLE IF EXISTS `classes` ;
 CREATE TABLE `classes` (
@@ -174,6 +174,7 @@ CREATE TABLE `documents_newsletter` (
   `trackingParameterName` varchar(255) DEFAULT NULL,
   `enableTrackingParameters` tinyint(1) unsigned DEFAULT NULL,
   `sendingMode` varchar(20) DEFAULT NULL,
+  `plaintext` LONGTEXT NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) DEFAULT CHARSET=utf8mb4;
 
@@ -183,7 +184,8 @@ CREATE TABLE `documents_hardlink` (
   `sourceId` int(11) DEFAULT NULL,
   `propertiesFromSource` tinyint(1) DEFAULT NULL,
   `childrenFromSource` tinyint(1) DEFAULT NULL,
-  PRIMARY KEY `id` (`id`)
+  PRIMARY KEY `id` (`id`),
+  KEY `sourceId` (`sourceId`)
 ) DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `documents_link`;
@@ -311,6 +313,7 @@ CREATE TABLE `glossary` (
 
 DROP TABLE IF EXISTS `http_error_log`;
 CREATE TABLE `http_error_log` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `uri` varchar(3000) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `code` int(3) DEFAULT NULL,
   `parametersGet` longtext,
@@ -319,6 +322,7 @@ CREATE TABLE `http_error_log` (
   `serverVars` longtext,
   `date` int(11) unsigned DEFAULT NULL,
   `count` bigint(20) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
   KEY (`uri` (765)),
   KEY `code` (`code`),
   KEY `date` (`date`),
@@ -330,7 +334,7 @@ CREATE TABLE `locks` (
   `id` varchar(150) NOT NULL DEFAULT '',
   `date` int(11) unsigned DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4;
+) DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `notes`;
 CREATE TABLE `notes` (
@@ -429,6 +433,8 @@ CREATE TABLE `redirects` (
   `expiry` int(11) unsigned DEFAULT NULL,
   `creationDate` int(11) unsigned DEFAULT '0',
   `modificationDate` int(11) unsigned DEFAULT '0',
+  `userOwner` int(11) unsigned DEFAULT NULL,
+  `userModification` int(11) unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `priority` (`priority`),
   KEY `active` (`active`)
@@ -479,7 +485,7 @@ CREATE TABLE `search_backend_data` (
   KEY `subtype` (`subtype`),
   KEY `published` (`published`),
   FULLTEXT KEY `fulltext` (`data`,`properties`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC;
+) DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC;
 
 DROP TABLE IF EXISTS `sites`;
 CREATE TABLE `sites` (
@@ -528,7 +534,7 @@ CREATE TABLE `targeting_rules` (
   `conditions` longtext,
   `actions` longtext,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `targeting_storage`;
 CREATE TABLE `targeting_storage` (
@@ -542,7 +548,7 @@ CREATE TABLE `targeting_storage` (
   KEY `targeting_storage_scope_index` (`scope`),
   KEY `targeting_storage_name_index` (`name`),
   KEY `targeting_storage_visitorId_index` (`visitorId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `targeting_target_groups`;
 CREATE TABLE `targeting_target_groups` (
@@ -552,7 +558,7 @@ CREATE TABLE `targeting_target_groups` (
   `threshold` int(11) DEFAULT NULL,
   `active` tinyint(1) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `tmp_store`;
 CREATE TABLE `tmp_store` (
@@ -677,6 +683,7 @@ CREATE TABLE `users` (
 DROP TABLE IF EXISTS `users_permission_definitions`;
 CREATE TABLE `users_permission_definitions` (
   `key` varchar(50) NOT NULL DEFAULT '',
+  `category` varchar(50) NOT NULL DEFAULT '',
   PRIMARY KEY (`key`)
 ) DEFAULT CHARSET=utf8mb4;
 
@@ -890,6 +897,7 @@ CREATE TABLE `gridconfigs` (
 	`classId` VARCHAR(50) NULL DEFAULT NULL,
 	`name` VARCHAR(50) NULL,
 	`searchType` VARCHAR(50) NULL,
+	`type` enum('asset','object') NOT NULL DEFAULT 'object',
 	`config` LONGTEXT NULL,
 	`description` LONGTEXT NULL,
 	`creationDate` INT(11) NULL,
@@ -911,6 +919,7 @@ CREATE TABLE `gridconfig_favourites` (
     `objectId` INT(11) NOT NULL DEFAULT '0',
 	`gridConfigId` INT(11) NULL,
 	`searchType` VARCHAR(50) NOT NULL DEFAULT '',
+	`type` enum('asset','object') NOT NULL DEFAULT 'object',
   PRIMARY KEY (`ownerId`, `classId`, `searchType`, `objectId`),
 	INDEX `ownerId` (`ownerId`),
 	INDEX `classId` (`classId`),

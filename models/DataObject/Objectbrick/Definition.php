@@ -17,6 +17,7 @@
 
 namespace Pimcore\Model\DataObject\Objectbrick;
 
+use Pimcore\Cache;
 use Pimcore\Cache\Runtime;
 use Pimcore\File;
 use Pimcore\Logger;
@@ -157,6 +158,15 @@ class Definition extends Model\DataObject\Fieldcollection\Definition
     {
         if (!$this->getKey()) {
             throw new \Exception('A object-brick needs a key to be saved!');
+        }
+
+        if (!preg_match('/[a-zA-Z]+[a-zA-Z0-9]+/', $this->getKey())) {
+            throw new \Exception(sprintf('Invalid key for object-brick: %s', $this->getKey()));
+        }
+
+        if ($this->getParentClass() && !preg_match('/^[a-zA-Z_\x7f-\xff\\\][a-zA-Z0-9_\x7f-\xff\\\]*$/', $this->getParentClass())) {
+            throw new \Exception(sprintf('Invalid parentClass value for class definition: %s',
+                $this->getParentClass()));
         }
 
         $this->checkTablenames();
@@ -458,6 +468,8 @@ class Definition extends Model\DataObject\Fieldcollection\Definition
                 if (array_diff($new, $old) || array_diff($old, $new)) {
                     $class->save();
                 } else {
+                    // still, the brick fields definitions could have changed.
+                    Cache::clearTag('class_'.$class->getId());
                     Logger::debug('Objectbrick ' . $this->getKey() . ', no change for class ' . $class->getName());
                 }
             }

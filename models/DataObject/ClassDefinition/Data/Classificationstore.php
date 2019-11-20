@@ -207,6 +207,9 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
         $items = $data->getItems();
 
         foreach ($items  as $groupId => $keys) {
+            if (!isset($data->getActiveGroups()[$groupId])) {
+                continue;
+            }
             foreach ($keys as $keyId => $languages) {
                 $keyConfig = DataObject\Classificationstore\DefinitionCache::get($keyId);
                 if ($keyConfig->getEnabled()) {
@@ -415,8 +418,12 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
         $getter = 'get' . ucfirst($this->getName());
         $classificationStore = $object->$getter();
         $items = $classificationStore->getItems();
+        $activeGroups = $classificationStore->getActiveGroups();
         if ($items) {
             foreach ($items as $groupId => $keys) {
+                if (!isset($activeGroups[$groupId])) {
+                    continue;
+                }
                 foreach ($keys as $keyId => $values) {
                     $keyConfig = $this->getKeyConfiguration($keyId);
                     $fieldDefinition = DataObject\Classificationstore\Service::getFieldDefinitionFromKeyConfig($keyConfig);
@@ -486,6 +493,9 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
             $items = $data->getItems();
 
             foreach ($items as $groupId => $groupData) {
+                if (!isset($activeGroups[$groupId])) {
+                    continue;
+                }
                 $groupResult = [];
 
                 foreach ($groupData as $keyId => $keyData) {
@@ -584,29 +594,29 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
             $storeData->setFieldname($this->getName());
             $storeData->setObject($object);
             $activeGroupsLocal = [];
-            $activeGroupsRemote = $value->activeGroups;
-            if (is_array($activeGroupsRemote)) {
+            $activeGroupsRemote = $value['activeGroups'];
+
+            if ($activeGroupsRemote instanceof \stdClass) {
+                $activeGroupsRemote = get_object_vars($activeGroupsRemote);
                 foreach ($activeGroupsRemote as $data) {
-                    $remoteId = $data->id;
-                    $localId = $idMapper->getMappedId('csGroup', $remoteId);
+                    $localId = $idMapper ? $idMapper->getMappedId('csGroup', $data['id']) : $data['id'];
                     $activeGroupsLocal[$localId] = $localId;
                 }
             }
 
             $storeData->setActiveGroups($activeGroupsLocal);
 
-            $groupsRemote = $value->groups;
-            if (is_array($groupsRemote)) {
+            $groupsRemote = $value['groups'];
+            if ($groupsRemote instanceof \stdClass) {
+                $groupsRemote = get_object_vars($groupsRemote);
                 foreach ($groupsRemote as $remoteGroupData) {
-                    $remoteGroupId = $remoteGroupData->id;
-                    $localGroupId = $idMapper->getMappedId('csGroup', $remoteGroupId);
-                    $remoteKeys = $remoteGroupData->keys;
+                    $localGroupId = $idMapper ? $idMapper->getMappedId('csGroup', $remoteGroupData['id']) : $remoteGroupData['id'];
+                    $remoteKeys = $remoteGroupData['keys'];
                     $remoteKeys = (array) $remoteKeys;
 
                     foreach ($remoteKeys as $language => $keyList) {
                         foreach ($keyList as $keyData) {
-                            $remoteKeyId = $keyData->id;
-                            $localKeyId = $idMapper->getMappedId('csKey', $remoteKeyId);
+                            $localKeyId = $idMapper ? $idMapper->getMappedId('csKey', $keyData->id) : $keyData->id;
                             $keyConfig = DataObject\Classificationstore\KeyConfig::getById($localKeyId);
                             $keyDef = DataObject\Classificationstore\Service::getFieldDefinitionFromJson(json_decode($keyConfig->getDefinition()), $keyConfig->getType());
                             $value = $keyData->value;
@@ -951,7 +961,7 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
     /**
      * Checks if data is valid for current data field
      *
-     * @param mixed $data
+     * @param DataObject\Classificationstore $data
      * @param bool $omitMandatoryCheck
      *
      * @throws \Exception
@@ -964,7 +974,8 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
         }
         $items = $data->getItems();
         $validLanguages = $this->getValidLanguages();
-        $errors = [];
+        $subItems = [];
+        $getInheritedValues = DataObject\AbstractObject::doGetInheritedValues();
 
         if (!$omitMandatoryCheck) {
             foreach ($activeGroups as $activeGroupId => $enabled) {
@@ -980,7 +991,15 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
                     foreach ($keyGroupRelations as $keyGroupRelation) {
                         foreach ($validLanguages as $validLanguage) {
                             $keyId = $keyGroupRelation->getKeyId();
-                            $value = $items[$activeGroupId][$keyId][$validLanguage];
+
+                            $object = $data->getObject();
+                            if ($object->getClass()->getAllowInherit()) {
+                                DataObject\AbstractObject::setGetInheritedValues(true);
+                                $value = $data->getLocalizedKeyValue($activeGroupId, $keyId, $validLanguage, true);
+                                DataObject\AbstractObject::setGetInheritedValues($getInheritedValues);
+                            } else {
+                                $value = $items[$activeGroupId][$keyId][$validLanguage];
+                            }
 
                             $keyDef = DataObject\Classificationstore\Service::getFieldDefinitionFromJson(json_decode($keyGroupRelation->getDefinition()), $keyGroupRelation->getType());
 
@@ -989,24 +1008,26 @@ class Classificationstore extends Data implements CustomResourcePersistingInterf
                             }
                             try {
                                 $keyDef->checkValidity($value);
-                            } catch (\Exception $e) {
-                                $errors[] = [
-                                    'exception' => $e,
-                                    'language' => $validLanguage
-                                ];
+                            } catch (\Exception $exception) {
+                                $subItems[] = new Model\Element\ValidationException(
+                                    $exception->getMessage() . ' (' . $validLanguage . ')',
+                                    $exception->getCode(),
+                                    $exception->getPrevious()
+                                );
                             }
                         }
                     }
                 }
             }
         }
-        if ($errors) {
-            $messages = [];
-            foreach ($errors as $error) {
-                $messages[] = $error['exception']->getMessage() . ' (' . $error['language'] . ')';
-            }
+
+        if ($subItems) {
+            $messages = array_map(function (Model\Element\ValidationException $validationException) {
+                return $validationException->getMessage();
+            }, $subItems);
+
             $validationException = new Model\Element\ValidationException(implode(', ', $messages));
-            $validationException->setSubItems($errors);
+            $validationException->setSubItems($subItems);
             throw $validationException;
         }
     }

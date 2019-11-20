@@ -23,6 +23,7 @@ use Pimcore\Event\FrontendEvents;
 use Pimcore\Event\Model\AssetEvent;
 use Pimcore\File;
 use Pimcore\Logger;
+use Pimcore\Model\Asset\Listing;
 use Pimcore\Model\Element\ElementInterface;
 use Pimcore\Tool\Mime;
 use Symfony\Component\EventDispatcher\GenericEvent;
@@ -348,7 +349,7 @@ class Asset extends Element\AbstractElement
             } else {
                 $mimeType = Mime::detect($data['sourcePath'], $data['filename']);
                 if (is_file($data['sourcePath'])) {
-                    $data['stream'] = fopen($data['sourcePath'], 'r+', false, File::getContext());
+                    $data['stream'] = fopen($data['sourcePath'], 'r', false, File::getContext());
                 }
 
                 unset($data['sourcePath']);
@@ -381,15 +382,16 @@ class Asset extends Element\AbstractElement
      */
     public static function getList($config = [])
     {
-        if (is_array($config)) {
-            $listClass = 'Pimcore\\Model\\Asset\\Listing';
-
-            $list = self::getModelFactory()->build($listClass);
-            $list->setValues($config);
-            $list->load();
-
-            return $list;
+        if (!\is_array($config)) {
+            throw new \Exception('Unable to initiate list class - please provide valid configuration array');
         }
+
+        $listClass = Listing::class;
+
+        $list = self::getModelFactory()->build($listClass);
+        $list->setValues($config);
+
+        return $list;
     }
 
     /**
@@ -399,14 +401,10 @@ class Asset extends Element\AbstractElement
      */
     public static function getTotalCount($config = [])
     {
-        if (is_array($config)) {
-            $listClass = 'Pimcore\\Model\\Asset\\Listing';
-            $list = self::getModelFactory()->build($listClass);
-            $list->setValues($config);
-            $count = $list->getTotalCount();
+        $list = static::getList($config);
+        $count = $list->getTotalCount();
 
-            return $count;
-        }
+        return $count;
     }
 
     /**
@@ -1343,15 +1341,15 @@ class Asset extends Element\AbstractElement
      */
     public function getChecksum($type = 'md5')
     {
+        if (!in_array($type, hash_algos())) {
+            throw new \Exception(sprintf('Hashing algorithm `%s` is not supported', $type));
+        }
+
         $file = $this->getFileSystemPath();
         if (is_file($file)) {
-            if ($type == 'md5') {
-                return md5_file($file);
-            } elseif ($type == 'sha1') {
-                return sha1_file($file);
-            } else {
-                throw new \Exception("hashing algorithm '" . $type . "' isn't supported");
-            }
+            return hash_file($type, $file);
+        } elseif (\is_resource($this->getStream())) {
+            return hash($type, $this->getData());
         }
 
         return null;
@@ -1400,7 +1398,7 @@ class Asset extends Element\AbstractElement
     }
 
     /**
-     * @param array $properties
+     * @param Property[] $properties
      *
      * @return $this
      */
@@ -1479,7 +1477,7 @@ class Asset extends Element\AbstractElement
     }
 
     /**
-     * @return array
+     * @return Version[]
      */
     public function getVersions()
     {
@@ -1491,7 +1489,7 @@ class Asset extends Element\AbstractElement
     }
 
     /**
-     * @param array $versions
+     * @param Version[] $versions
      *
      * @return $this
      */
@@ -1620,11 +1618,15 @@ class Asset extends Element\AbstractElement
      */
     public function setMetadata($metadata)
     {
-        $this->metadata = $metadata;
-
+        $this->metadata = [];
+        $this->setHasMetaData(false);
         if (!empty($metadata)) {
-            $this->setHasMetaData(true);
+            foreach ((array)$metadata as $metaItem) {
+                $this->addMetadata($metaItem['name'], $metaItem['type'], $metaItem['data'] ?? null, $metaItem['language'] ?? null);
+            }
         }
+
+        return $this;
     }
 
     /**
@@ -1641,6 +1643,8 @@ class Asset extends Element\AbstractElement
     public function setHasMetaData($hasMetaData)
     {
         $this->hasMetaData = (bool) $hasMetaData;
+
+        return $this;
     }
 
     /**
@@ -1653,6 +1657,7 @@ class Asset extends Element\AbstractElement
     {
         if ($name && $type) {
             $tmp = [];
+            $name = str_replace('~', '---', $name);
             if (!is_array($this->metadata)) {
                 $this->metadata = [];
             }
@@ -1672,15 +1677,18 @@ class Asset extends Element\AbstractElement
 
             $this->setHasMetaData(true);
         }
+
+        return $this;
     }
 
     /**
      * @param null $name
      * @param null $language
+     * @param bool $strictMatch
      *
-     * @return array
+     * @return array|null
      */
-    public function getMetadata($name = null, $language = null)
+    public function getMetadata($name = null, $language = null, $strictMatch = false)
     {
         $convert = function ($metaData) {
             if (in_array($metaData['type'], ['asset', 'document', 'object']) && is_numeric($metaData['data'])) {
@@ -1701,7 +1709,7 @@ class Asset extends Element\AbstractElement
                     if ($language == $md['language']) {
                         return $convert($md);
                     }
-                    if (empty($md['language'])) {
+                    if (empty($md['language']) && !$strictMatch) {
                         $data = $md;
                     }
                 }
@@ -1844,9 +1852,9 @@ class Asset extends Element\AbstractElement
         $parentVars = parent::__sleep();
         $blockedVars = ['_temporaryFiles', 'scheduledTasks', 'dependencies', 'userPermissions', 'hasChildren', 'versions', 'parent', 'stream'];
 
-        if (isset($this->_fulldump)) {
+        if ($this->isInDumpState()) {
             // this is if we want to make a full dump of the asset (eg. for a new version), including children for recyclebin
-            $finalVars[] = '_fulldump';
+            $finalVars[] = $this->getDumpStateProperty();
             $this->removeInheritedProperties();
         } else {
             // this is if we want to cache the asset
@@ -1864,7 +1872,7 @@ class Asset extends Element\AbstractElement
 
     public function __wakeup()
     {
-        if (isset($this->_fulldump)) {
+        if ($this->isInDumpState()) {
             // set current key and path this is necessary because the serialized data can have a different path than the original element (element was renamed or moved)
             $originalElement = Asset::getById($this->getId());
             if ($originalElement) {
@@ -1873,13 +1881,11 @@ class Asset extends Element\AbstractElement
             }
         }
 
-        if (isset($this->_fulldump) && $this->properties !== null) {
+        if ($this->isInDumpState() && $this->properties !== null) {
             $this->renewInheritedProperties();
         }
 
-        if (isset($this->_fulldump)) {
-            unset($this->_fulldump);
-        }
+        $this->setInDumpState(false);
     }
 
     public function removeInheritedProperties()

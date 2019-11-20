@@ -255,6 +255,7 @@
   "add_setting": "Add Setting",
   "reverse": "Reverse",
   "geopolygon": "Geographic Polygon",
+  "geopolyline": "Geographic Polyline",
   "geobounds": "Geographic Bounds",
   "sure_to_install_unstable_update": "Are you sure that you want to install a potential not working version?",
   "analytics_accountid": "Account-ID (eg. 1234567)",
@@ -441,6 +442,7 @@
   "classificationstore_mbx_entergroup_prompt": "Enter name",
   "classificationstore_error_addgroup_msg": "Error adding group",
   "classificationstore_invalidname": "Invalid name",
+  "classificationstore_error_group_exists_msg": "Group with this name already exists",
   "classificationstore_properties": "Key Definitions",
   "classificationstore_mbx_enterkey_title": "New Key",
   "classificationstore_detailed_configuration": "Detailed Configuration",
@@ -709,5 +711,9 @@
   "enable_admin_async_load": "Enable Async Load in Admin",
   "async_loading_warning_block":  "WARNING: Async Loading is NOT possible within Localized Fields and Blocks",
   "activate_column_configuration": "Activate Column Configuration",
-  "table_column_configuration": "Column Configuration"
+  "table_column_configuration": "Column Configuration",
+  "send_invitation_link": "Send Invitation Link",
+  "invitation_sent": "Login Invitation sent",
+  "invitation_link_sent": "A temporary login link has been sent to email address: \"%s\" ",
+  "classificationstore_group_by_key": "Group by key"
 }
