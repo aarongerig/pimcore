@@ -539,7 +539,7 @@ class DefaultMysql implements ProductListInterface
             return $this->resource->loadGroupByRelationValues($fieldname, $this->buildQueryFromConditions(false, $excludedFieldName), $countValues);
         } else {
             throw new \Exception('Not supported yet');
-        } 
+        }
     }
 
     protected function buildQueryFromConditions($excludeConditions = false, $excludedFieldname = null, $variantMode = null)
@@ -876,7 +876,8 @@ class DefaultMysql implements ProductListInterface
     public function __wakeup()
     {
         if (empty($this->resource)) {
-            $this->resource = new DefaultMysql\Dao($this);
+            $this->logger = \Pimcore::getContainer()->get('monolog.logger.pimcore_ecommerce_sql');
+            $this->resource = new DefaultMysql\Dao($this, $this->logger);
         }
     }
 
