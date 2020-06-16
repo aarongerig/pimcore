@@ -105,7 +105,7 @@ And you can see the effect, below:
 | `limit`             | int    | Limit the amount of elements                                                                                                                                                                 |
 | `areablock_toolbar` | array  | Array with option that allows you to configure the toolbar. Possible options are `width`, `buttonWidth` and `buttonMaxCharacters`                                                            |
 | `controlsAlign`     | string | The position of the control button bar. Options are: `top`, `right` and `left`.                                                                                                              |
-| `controlsTrigger`   | string | Options are: `hover` and `fixed` (default).                                                                                                              |
+| `controlsTrigger`   | string | Options are: `hover`(default) and `fixed` .                                                                                                              |
 | `class`             | string | A CSS class that is added to the surrounding container of this element in editmode                                                                                                           |
 
 ## Brick-specific Configuration
@@ -113,7 +113,7 @@ Brick-specific configurations are passed using the `params` or `globalParams` co
 
 | Name              | Type | Description                                                                                                                                                     |
 |-------------------|------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `forceEditInView` | bool | If a brick contains an edit.php there's no editmode for the `view.php` file, if you want to have the editmode enabled in both templates, enable this option |
+| `forceEditInView` | bool | If a brick contains an `edit.php` there's no editmode for the `view.php` file, if you want to have the editmode enabled in both templates, enable this option |
 | `editWidth`       | int  | Width of editing popup (if dedicated `edit.php` is used).                                                                                               |
 | `editHeight`      | int  | Height of editing popup (if dedicated `edit.php` is used).                                                                                              |
   

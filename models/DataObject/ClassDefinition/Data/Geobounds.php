@@ -67,7 +67,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
      * @see ResourcePersistenceAwareInterface::getDataForResource
      *
      * @param DataObject\Data\Geobounds $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return array
@@ -95,7 +95,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
      * @see ResourcePersistenceAwareInterface::getDataFromResource
      *
      * @param array $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return DataObject\Data\Geobounds|null
@@ -122,7 +122,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
      * @see QueryResourcePersistenceAwareInterface::getDataForQueryResource
      *
      * @param DataObject\Data\Geobounds $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return array
@@ -136,7 +136,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
      * @see Data::getDataForEditmode
      *
      * @param DataObject\Data\Geobounds $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return array|null
@@ -156,8 +156,8 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
     }
 
     /**
-     * @param $data
-     * @param null $object
+     * @param DataObject\Data\Geobounds|null $data
+     * @param DataObject\Concrete|null $object
      * @param array $params
      *
      * @return array
@@ -171,10 +171,10 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
      * @see Data::getDataFromEditmode
      *
      * @param array $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
-     * @return DataObject\Data\Geobounds
+     * @return DataObject\Data\Geobounds|null
      */
     public function getDataFromEditmode($data, $object = null, $params = [])
     {
@@ -185,14 +185,14 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
             return new DataObject\Data\Geobounds($ne, $sw);
         }
 
-        return;
+        return null;
     }
 
     /**
      * @see Data::getVersionPreview
      *
      * @param DataObject\Data\Geobounds $data
-     * @param null|DataObject\AbstractObject $object
+     * @param DataObject\Concrete|null $object
      * @param mixed $params
      *
      * @return string
@@ -211,7 +211,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
      *
      * @abstract
      *
-     * @param DataObject\AbstractObject $object
+     * @param DataObject\Concrete $object
      * @param array $params
      *
      * @return string
@@ -221,14 +221,14 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
         $data = $this->getDataFromObjectParam($object, $params);
         if ($data instanceof DataObject\Data\Geobounds) {
             return  $data->getNorthEast()->getLongitude().','.$data->getNorthEast()->getLatitude().'|'.$data->getSouthWest()->getLongitude().','.$data->getSouthWest()->getLatitude();
-        } else {
-            return null;
         }
+
+        return '';
     }
 
     /**
      * @param string $importValue
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return null|DataObject\ClassDefinition\Data|DataObject\Data\Geobounds
@@ -249,7 +249,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
     }
 
     /**
-     * @param $object
+     * @param DataObject\Concrete|DataObject\Objectbrick\Data\AbstractData|DataObject\Fieldcollection\Data\AbstractData $object
      * @param mixed $params
      *
      * @return string
@@ -262,10 +262,12 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
     /**
      * converts data to be exposed via webservices
      *
-     * @param string $object
-     * @param mixed $params
+     * @deprecated
      *
-     * @return mixed
+     * @param DataObject\Concrete $object
+     * @param array $params
+     *
+     * @return array|null
      */
     public function getForWebserviceExport($object, $params = [])
     {
@@ -277,16 +279,18 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
                 'SWlongitude' => $data->getSouthWest()->getLongitude(),
                 'SWlatitude' => $data->getSouthWest()->getLatitude()
             ];
-        } else {
-            return null;
         }
+
+        return null;
     }
 
     /**
+     * @deprecated
+     *
      * @param mixed $value
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
-     * @param null $idMapper
+     * @param Model\Webservice\IdMapperInterface|null $idMapper
      *
      * @return mixed|void
      *
@@ -310,7 +314,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
     }
 
     /** True if change is allowed in edit mode.
-     * @param string $object
+     * @param DataObject\Concrete $object
      * @param mixed $params
      *
      * @return bool
@@ -322,7 +326,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
 
     /** Encode value for packing it into a single column.
      * @param mixed $value
-     * @param Model\DataObject\AbstractObject $object
+     * @param DataObject\Concrete $object
      * @param mixed $params
      *
      * @return mixed
@@ -339,7 +343,7 @@ class Geobounds extends AbstractGeo implements ResourcePersistenceAwareInterface
 
     /** See marshal
      * @param mixed $value
-     * @param Model\DataObject\AbstractObject $object
+     * @param DataObject\Concrete $object
      * @param mixed $params
      *
      * @return mixed

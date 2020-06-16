@@ -16,7 +16,7 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
 
     getData: function () {
         Ext.Ajax.request({
-            url: "/admin/asset/get-data-by-id",
+            url: Routing.generate('pimcore_admin_asset_getdatabyid'),
             success: this.getDataComplete.bind(this),
             failure: function() {
                 this.forgetOpenTab();
@@ -65,11 +65,6 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
         this.tabPanel = Ext.getCmp("pimcore_panel_tabs");
         var tabId = "asset_" + this.id;
 
-        var iconClass = "pimcore_icon_asset_default pimcore_icon_" + this.data.fileExtension;
-        if (this.data.type == "folder") {
-            iconClass = "pimcore_icon_folder";
-        }
-
         this.tab = new Ext.Panel({
             id: tabId,
             title: htmlspecialchars(tabTitle),
@@ -77,7 +72,7 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
             layout: "border",
             items: [this.getLayoutToolbar(),this.getTabPanel()],
             asset: this,
-            iconCls: iconClass
+            iconCls: this.getIconClass()
         });
 
         this.tab.on("activate", function () {
@@ -88,7 +83,7 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
 
         this.tab.on("beforedestroy", function () {
             Ext.Ajax.request({
-                url: "/admin/element/unlock-element",
+                url: Routing.generate('pimcore_admin_element_unlockelement'),
                 method: 'PUT',
                 params: {
                     id: this.data.id,
@@ -201,7 +196,7 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
                 iconCls: "pimcore_material_icon_download pimcore_material_icon",
                 scale: "medium",
                 handler: function () {
-                    pimcore.helpers.download("/admin/asset/download?id=" + this.data.id);
+                    pimcore.helpers.download(Routing.generate('pimcore_admin_asset_download', {id: this.data.id}));
                 }.bind(this)
             });
 
@@ -238,7 +233,7 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
                     scale: "medium",
                     handler: function () {
                         Ext.Ajax.request({
-                            url: "/admin/asset/clear-thumbnail",
+                            url: Routing.generate('pimcore_admin_asset_clearthumbnail'),
                             method: 'POST',
                             params: {
                                 id: this.data.id
@@ -342,10 +337,24 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
 
         this.tab.mask();
 
-        pimcore.plugin.broker.fireEvent("preSaveAsset", this.id);
+        try {
+            pimcore.plugin.broker.fireEvent("preSaveAsset", this.id);
+        } catch (e) {
+            if (e instanceof pimcore.error.ValidationException) {
+                this.tab.unmask();
+                pimcore.helpers.showPrettyError('asset', t("error"), t("saving_failed"), e.message);
+                return false;
+            }
+
+            if (e instanceof pimcore.error.ActionCancelledException) {
+                this.tab.unmask();
+                pimcore.helpers.showNotification(t("Info"), 'Asset not saved: ' + e.message, 'info');
+                return false;
+            }
+        }
 
         Ext.Ajax.request({
-            url: '/admin/asset/save',
+            url: Routing.generate('pimcore_admin_asset_save'),
             method: "PUT",
             success: function (response) {
                 try{
@@ -356,6 +365,8 @@ pimcore.asset.asset = Class.create(pimcore.element.abstract, {
                         Ext.apply(this.data, rdata.data);
 
                         pimcore.plugin.broker.fireEvent("postSaveAsset", this.id);
+                        pimcore.helpers.updateTreeElementStyle('asset', this.id, rdata.treeData);
+
                     }
                 } catch(e){
                     pimcore.helpers.showNotification(t("error"), t("saving_failed"), "error");

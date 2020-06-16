@@ -15,6 +15,7 @@
 namespace Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\ProductList\ElasticSearch;
 
 use Pimcore\Bundle\EcommerceFrameworkBundle\Factory;
+use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Config\ElasticSearch;
 use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Config\ElasticSearchConfigInterface;
 use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\ProductList\ProductListInterface;
 use Pimcore\Bundle\EcommerceFrameworkBundle\Model\AbstractCategory;
@@ -50,7 +51,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     protected $tenantName;
 
     /**
-     * @var ElasticSearchConfigInterface
+     * @var ElasticSearch
      */
     protected $tenantConfig;
 
@@ -157,6 +158,11 @@ abstract class AbstractElasticSearch implements ProductListInterface
     protected $scrollRequestKeepAlive = '30s';
 
     /**
+     * @var array
+     */
+    private $hitData = [];
+
+    /**
      * @return array
      */
     public function getSearchAggregation()
@@ -256,9 +262,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * Reset condition for fieldname
      *
-     * @param $fieldname
-     *
-     * @return mixed
+     * @param string $fieldname
      */
     public function resetCondition($fieldname)
     {
@@ -297,7 +301,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
      * Fieldname is optional but highly recommended - needed for resetting condition based on fieldname
      * and exclude functionality in group by results
      *
-     * @param $condition
+     * @param string $condition
      * @param string $fieldname - must be set for elastic search
      */
     public function addQueryCondition($condition, $fieldname = '')
@@ -310,9 +314,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * Reset query condition for fieldname
      *
-     * @param $fieldname
-     *
-     * @return mixed
+     * @param string $fieldname
      */
     public function resetQueryCondition($fieldname)
     {
@@ -358,7 +360,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * sets order direction
      *
-     * @param $order
+     * @param string $order
      *
      * @return void
      */
@@ -381,7 +383,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * sets order key
      *
-     * @param $orderKey string | array  - either single field name, or array of field names or array of arrays (field name, direction)
+     * @param string|array $orderKey either single field name, or array of field names or array of arrays (field name, direction)
      *
      * @return void
      */
@@ -408,7 +410,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * Pass "unlimited" to do da Scroll Request
      *
-     * @param $limit int
+     * @param int $limit
      *
      * @return void
      */
@@ -436,7 +438,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     }
 
     /**
-     * @param $offset int
+     * @param int $offset
      *
      * @return void
      */
@@ -457,7 +459,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     }
 
     /**
-     * @param $category
+     * @param AbstractCategory $category
      *
      * @return void
      */
@@ -477,7 +479,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     }
 
     /**
-     * @param $variantMode
+     * @param string $variantMode
      *
      * @return void
      */
@@ -565,7 +567,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
         $params = [];
         $params['index'] = $this->getIndexName();
         $params['type'] = $this->getTenantConfig()->getElasticSearchClientParams()['indexType'];
-        $params['body']['_source'] = false;
+        $params['body']['_source'] = true;
 
         if (is_integer($this->getLimit())) { // null not allowed
             $params['body']['size'] = $this->getLimit();
@@ -602,6 +604,9 @@ abstract class AbstractElasticSearch implements ProductListInterface
     protected function loadWithoutPriceFilterWithoutPriceSorting()
     {
         $params = $this->getQuery();
+
+        $this->hitData = [];
+
         // send request
         $result = $this->sendRequest($params);
 
@@ -610,6 +615,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
             $this->totalCount = $result['hits']['total'];
             foreach ($result['hits']['hits'] as $hit) {
                 $objectRaws[] = $hit['_id'];
+                $this->hitData[$hit['_id']] = $hit;
             }
         }
 
@@ -626,16 +632,18 @@ abstract class AbstractElasticSearch implements ProductListInterface
     protected function loadWithoutPriceFilterWithPriceSorting()
     {
         $params = $this->getQuery();
+        $this->hitData = [];
+
         unset($params['body']['sort']);     // don't send the sort parameter, because it doesn't exist with offline sorting
         $params['body']['size'] = 10000;    // won't work with more than 10000 items in the result (elasticsearch limit)
         $params['body']['from'] = 0;
-        $params['body']['fields'] = ['system.priceSystemName'];
         $result = $this->sendRequest($params);
         $objectRaws = [];
         if ($result['hits']) {
             $this->totalCount = $result['hits']['total'];
             foreach ($result['hits']['hits'] as $hit) {
-                $objectRaws[] = ['id' => $hit['_id'], 'priceSystemName' => reset($hit['fields']['system.priceSystemName'])];
+                $objectRaws[] = ['id' => $hit['_id'], 'priceSystemName' => $hit['_source']['system']['priceSystemName']];
+                $this->hitData[$hit['_id']] = $hit;
             }
         }
         $priceSystemArrays = [];
@@ -651,7 +659,9 @@ abstract class AbstractElasticSearch implements ProductListInterface
         } else {
             throw new \Exception('Not implemented yet - multiple pricing systems are not supported yet');
         }
+
         $raws = [];
+
         foreach ($objectRaws as $raw) {
             $raws[] = $raw['o_id'];
         }
@@ -759,8 +769,8 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * builds relation conditions of user specific query conditions
      *
-     * @param $boolFilters
-     * @param $excludedFieldnames
+     * @param array $boolFilters
+     * @param array $excludedFieldnames
      *
      * @return array
      */
@@ -784,8 +794,8 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * builds filter condition of user specific conditions
      *
-     * @param $boolFilters
-     * @param $excludedFieldnames
+     * @param array $boolFilters
+     * @param array $excludedFieldnames
      *
      * @return array
      */
@@ -809,8 +819,8 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * builds query condition of query filters
      *
-     * @param $queryFilters
-     * @param $excludedFieldnames
+     * @param array $queryFilters
+     * @param array $excludedFieldnames
      *
      * @return array
      */
@@ -847,13 +857,29 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * loads element by id
      *
-     * @param $elementId
+     * @param int $elementId
      *
      * @return array|IndexableInterface
      */
     protected function loadElementById($elementId)
     {
-        return $this->tenantConfig->getObjectMockupById($elementId);
+        /** @var ElasticSearch $tenantConfig */
+        $tenantConfig = $this->getTenantConfig();
+        $mockup = null;
+        if (isset($this->hitData[$elementId])) {
+            $hitData = $this->hitData[$elementId];
+            $sourceData = $hitData['_source'];
+
+            //mapping of relations
+            $relationFormatPimcore = [];
+            foreach ($sourceData['relations'] ?: [] as $name => $relation) {
+                $relationFormatPimcore[] = ['fieldname' => $name, 'dest' => $relation[0], 'type' => 'object'];
+            }
+            $mergedAttributes = array_merge($sourceData['system'], $sourceData['attributes']);
+            $mockup = $tenantConfig->createMockupObject($elementId, $mergedAttributes, $relationFormatPimcore);
+        }
+
+        return $mockup;
     }
 
     /**
@@ -873,7 +899,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     }
 
     /**
-     * @param $fieldname
+     * @param string $fieldname
      * @param bool $countValues
      * @param bool $fieldnameShouldBeExcluded
      * @param array $aggregationConfig
@@ -941,7 +967,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * loads group by values based on system either from local variable if prepared or directly from product index
      *
-     * @param $fieldname
+     * @param string $fieldname
      * @param bool $countValues
      * @param bool $fieldnameShouldBeExcluded => set to false for and-conditions
      *
@@ -957,7 +983,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * loads group by values based on fieldname either from local variable if prepared or directly from product index
      *
-     * @param $fieldname
+     * @param string $fieldname
      * @param bool $countValues
      * @param bool $fieldnameShouldBeExcluded => set to false for and-conditions
      *
@@ -973,7 +999,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * loads group by values based on relation fieldname either from local variable if prepared or directly from product index
      *
-     * @param      $fieldname
+     * @param string $fieldname
      * @param bool $countValues
      * @param bool $fieldnameShouldBeExcluded => set to false for and-conditions
      *
@@ -989,7 +1015,7 @@ abstract class AbstractElasticSearch implements ProductListInterface
     /**
      * checks if group by values are loaded and returns them
      *
-     * @param $fieldname
+     * @param string $fieldname
      * @param bool $countValues
      * @param bool $fieldnameShouldBeExcluded
      *
@@ -1029,9 +1055,11 @@ abstract class AbstractElasticSearch implements ProductListInterface
     {
         // create general filters and queries
         $toExcludeFieldnames = [];
+        /** @var ElasticSearch $tenantConfig */
+        $tenantConfig = $this->getTenantConfig();
         foreach ($this->preparedGroupByValues as $fieldname => $config) {
             if ($config['fieldnameShouldBeExcluded']) {
-                $toExcludeFieldnames[$this->getTenantConfig()->getReverseMappedFieldName($fieldname)] = $fieldname;
+                $toExcludeFieldnames[$tenantConfig->getReverseMappedFieldName($fieldname)] = $fieldname;
             }
         }
 
@@ -1210,9 +1238,13 @@ abstract class AbstractElasticSearch implements ProductListInterface
         if (!empty($bucket)) {
             $subAggregationField = array_key_first($bucket);
             $subAggregationBuckets = $bucket[$subAggregationField];
+            $reverseAggregationField = array_key_last($bucket);
+            $reverseAggregationBucket = $bucket[$reverseAggregationField];
 
             if (array_key_exists('key_as_string', $bucket)) {          // date aggregations
                 $data['key_as_string'] = $bucket['key_as_string'];
+            } elseif (is_array($reverseAggregationBucket) && array_key_exists('doc_count', $reverseAggregationBucket)) { // reverse aggregation
+                $data['reverse_count'] = $reverseAggregationBucket['doc_count'];
             } elseif (is_array($subAggregationBuckets['buckets'])) {        // sub aggregations
                 foreach ($subAggregationBuckets['buckets'] as $bucket) {
                     $data[$subAggregationField][] = $this->convertBucketValues($bucket);
@@ -1241,9 +1273,10 @@ abstract class AbstractElasticSearch implements ProductListInterface
     protected function sendRequest(array $params)
     {
         /**
-         * @var $esClient \Elasticsearch\Client
+         * @var \Elasticsearch\Client $esClient
          */
         $esClient = $this->tenantConfig->getTenantWorker()->getElasticSearchClient();
+        $result = [];
 
         if ($esClient instanceof \Elasticsearch\Client) {
             if ($this->doScrollRequest) {
@@ -1414,5 +1447,23 @@ abstract class AbstractElasticSearch implements ProductListInterface
         $var = $this->current() !== false;
 
         return $var;
+    }
+
+    /**
+     * Get the score from a loaded product list based on a (Pimcore) product Id.
+     *
+     * @param int $productId the Pimcore product Id.
+     *
+     * @return float the score returned by Elastic Search.
+     *
+     * @throws \Exception if loadFromSource mode is not true.
+     */
+    public function getScoreFromLoadedList(int $productId): float
+    {
+        if (isset($this->hitData[$productId])) {
+            return $this->hitData[$productId]['_score'];
+        }
+
+        return 0.0;
     }
 }

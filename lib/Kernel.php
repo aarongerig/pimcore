@@ -15,6 +15,7 @@
 namespace Pimcore;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use FOS\JsRoutingBundle\FOSJsRoutingBundle;
 use Pimcore\Bundle\AdminBundle\PimcoreAdminBundle;
 use Pimcore\Bundle\CoreBundle\PimcoreCoreBundle;
 use Pimcore\Bundle\GeneratorBundle\PimcoreGeneratorBundle;
@@ -156,9 +157,6 @@ abstract class Kernel extends SymfonyKernel
         // handle system requirements
         $this->setSystemRequirements();
 
-        // force load config
-        \Pimcore::initConfiguration();
-
         // initialize extension manager config
         $this->extensionConfig = new Extension\Config();
 
@@ -270,7 +268,8 @@ abstract class Kernel extends SymfonyKernel
             new SensioFrameworkExtraBundle(),
             new CmfRoutingBundle(),
             new PrestaSitemapBundle(),
-            new SchebTwoFactorBundle()
+            new SchebTwoFactorBundle(),
+            new FOSJsRoutingBundle(),
         ], 100);
 
         // pimcore bundles
@@ -357,8 +356,6 @@ abstract class Kernel extends SymfonyKernel
         if (php_sapi_name() === 'cli') {
             $maxExecutionTime = 0;
         }
-
-        error_reporting(E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
 
         //@ini_set("memory_limit", "1024M");
         @ini_set('max_execution_time', $maxExecutionTime);

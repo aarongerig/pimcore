@@ -52,7 +52,7 @@ pimcore.settings.user.user.settings = Class.create({
 
         generalItems.push({
             xtype: "checkbox",
-            fieldLabel: t("active"),
+            boxLabel: t("active"),
             name: "active",
             disabled: user.id == this.currentUser.id,
             checked: this.currentUser.active
@@ -75,7 +75,12 @@ pimcore.settings.user.user.settings = Class.create({
             listeners: {
                 keyup: function (el) {
                     this.validatePassword(el);
-                }.bind(this)
+                }.bind(this),
+                afterrender: function (cmp) {
+                    cmp.inputEl.set({
+                        autocomplete: 'new-password'
+                    });
+                }
             }
         });
 
@@ -132,7 +137,7 @@ pimcore.settings.user.user.settings = Class.create({
                 hidden: !this.currentUser['twoFactorAuthentication']['isActive'],
                 handler: function () {
                     Ext.Ajax.request({
-                        url: "/admin/user/reset-2fa-secret",
+                        url: Routing.generate('pimcore_admin_user_reset2fasecret'),
                         method: 'PUT',
                         params: {
                             id: this.currentUser.id
@@ -147,7 +152,9 @@ pimcore.settings.user.user.settings = Class.create({
 
         var getPreviewImageHTML = function () {
             var date = new Date();
-            return '<img src="/admin/user/get-image?id=' + this.currentUser.id + '&_dc=' + date.getTime() + '" style="width: 46px" />'
+            var image = Routing.generate('pimcore_admin_user_getimage', {id: this.currentUser.id, '_dc': date.getTime()});
+
+            return '<img src="'+image+'" style="width: 46px" />'
         }.bind(this);
 
         generalItems.push({
@@ -161,7 +168,7 @@ pimcore.settings.user.user.settings = Class.create({
                 xtype: "button",
                 text: t("upload"),
                 handler: function () {
-                    pimcore.helpers.uploadDialog("/admin/user/upload-image?id=" + this.currentUser.id, null,
+                    pimcore.helpers.uploadDialog(Routing.generate('pimcore_admin_user_uploadimage', {id: this.currentUser.id}), null,
                         function () {
                             var cont = Ext.getCmp("pimcore_user_image_" + this.currentUser.id);
                             cont.update(getPreviewImageHTML());
@@ -206,7 +213,7 @@ pimcore.settings.user.user.settings = Class.create({
                     hidden: (this.currentUser.lastLogin > 0) || (user.id == this.currentUser.id),
                     handler: function () {
                         Ext.Ajax.request({
-                            url: "/admin/user/invitationlink",
+                            url: Routing.generate('pimcore_admin_user_invitationlink'),
                             method: 'POST',
                             ignoreErrors: true,
                             params: {
@@ -285,6 +292,16 @@ pimcore.settings.user.user.settings = Class.create({
         generalItems.push(this.roleField);
 
         var perspectivesStore = Ext.create('Ext.data.JsonStore', {
+            fields: [
+                "name",
+                {
+                    name:"translatedName",
+                    convert: function (v, rec) {
+                        return t(rec.data.name);
+                    },
+                    depends : ['name']
+                }
+            ],
             data: this.data.availablePerspectives
         });
 
@@ -296,7 +313,7 @@ pimcore.settings.user.user.settings = Class.create({
             width: 400,
             minHeight: 100,
             store: perspectivesStore,
-            displayField: "name",
+            displayField: "translatedName",
             valueField: "name",
             value: this.currentUser.perspectives ? this.currentUser.perspectives.join(",") : null,
             hidden: this.currentUser.admin
@@ -402,7 +419,7 @@ pimcore.settings.user.user.settings = Class.create({
             this.apiKeyDescription = new Ext.form.DisplayField({
                 hideLabel: true,
                 width: 600,
-                value: t("user_apikey_description"),
+                value: "<b>DEPRECATED! Will be removed in 7.0!</b>  " +  t("user_apikey_description"),
                 cls: "pimcore_extra_label_bottom",
                 hidden: !this.wsenabled
             });
@@ -418,7 +435,7 @@ pimcore.settings.user.user.settings = Class.create({
             disabled: user.id == this.currentUser.id,
             handler: function () {
                 Ext.Ajax.request({
-                    url: "/admin/user/get-token-login-link",
+                    url: Routing.generate('pimcore_admin_user_gettokenloginlink'),
                     ignoreErrors: true,
                     params: {
                         id: this.currentUser.id
@@ -480,7 +497,7 @@ pimcore.settings.user.user.settings = Class.create({
             }
             itemsPerSection[section].push({
                 xtype: "checkbox",
-                fieldLabel: t(this.data.availablePermissions[i].key),
+                boxLabel: t(this.data.availablePermissions[i].key),
                 name: "permission_" + this.data.availablePermissions[i].key,
                 checked: this.data.permissions[this.data.availablePermissions[i].key],
                 labelWidth: 200
@@ -519,7 +536,7 @@ pimcore.settings.user.user.settings = Class.create({
                     store: pimcore.globalmanager.get("document_types_store"),
                     value: this.currentUser.docTypes,
                     listConfig: {
-                        itemTpl: new Ext.XTemplate('{[this.sanitize(values.name)]}',
+                        itemTpl: new Ext.XTemplate('{[this.sanitize(values.translatedName)]}',
                             {
                                 sanitize: function (name) {
                                     return Ext.util.Format.htmlEncode(name);

@@ -32,6 +32,8 @@ use Pimcore\Tool\HtmlUtils;
 
 /**
  * @method \Pimcore\Model\Document\Tag\Dao getDao()
+ * @method void save()
+ * @method void delete()
  */
 abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\TagInterface
 {
@@ -72,19 +74,19 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     /**
      * Element belongs to the document
      *
-     * @var Document\PageSnippet
+     * @var Document\PageSnippet|null
      */
     protected $document;
 
     /**
      * @deprecated Unused - will be removed in 7.0
      *
-     * @var null
+     * @var string|null
      */
     protected $controller;
 
     /**
-     * @var ViewModelInterface
+     * @var ViewModelInterface|null
      */
     protected $view;
 
@@ -101,13 +103,13 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     protected $inherited = false;
 
     /**
-     * @param $type
-     * @param $name
-     * @param $documentId
-     * @param null $config
-     * @param null $controller
-     * @param null $view
-     * @param null $editmode
+     * @param string $type
+     * @param string $name
+     * @param int $documentId
+     * @param array|null $config
+     * @param string|null $controller
+     * @param ViewModel|null $view
+     * @param bool|null $editmode
      *
      * @return mixed
      */
@@ -132,7 +134,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     }
 
     /**
-     * @return string
+     * @return string|void
      */
     public function admin()
     {
@@ -244,8 +246,6 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
             } else {
                 $classes[] = (string)$editableOptions['class'];
             }
-
-            $classes[] = (string)$editableOptions['class'];
         }
 
         return $classes;
@@ -269,7 +269,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
      * @param array $options
      * @param bool $return
      *
-     * @return string
+     * @return string|void
      */
     protected function outputEditmodeOptions(array $options, $return = false)
     {
@@ -302,6 +302,8 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
         }
 
         $this->outputEditmode($code);
+
+        return;
     }
 
     /**
@@ -404,7 +406,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     /**
      * @deprecated
      *
-     * @param null $controller
+     * @param string|null $controller
      *
      * @return $this
      */
@@ -418,7 +420,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     /**
      * @deprecated
      *
-     * @return null
+     * @return string|null
      */
     public function getController()
     {
@@ -496,6 +498,13 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
         return $finalVars;
     }
 
+    public function __clone()
+    {
+        parent::__clone();
+        $this->view = null;
+        $this->document = null;
+    }
+
     /**
      * direct output to the frontend
      *
@@ -565,7 +574,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     }
 
     /**
-     * @return $this
+     * @return mixed
      */
     public function getDataForResource()
     {
@@ -575,7 +584,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     }
 
     /**
-     * @param $ownerDocument
+     * @param Model\Document\PageSnippet $ownerDocument
      * @param array $tags
      *
      * @return array
@@ -598,27 +607,27 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
      *
      * @abstract
      *
-     * @param Webservice\Data\Document\Element $wsElement
-     * @param $document
-     * @param array $params,
-     * @param $idMapper
-     * @param mixed $params
+     * @deprecated
      *
-     * @return Webservice\Data\Document\Element
+     * @param Webservice\Data\Document\Element $wsElement
+     * @param Model\Document\PageSnippet $document
+     * @param array $params
+     * @param Model\Webservice\IdMapperInterface|null $idMapper
      */
     public function getFromWebserviceImport($wsElement, $document = null, $params = [], $idMapper = null)
     {
-        return $wsElement;
     }
 
     /**
      * Returns the current tag's data for web service export
      *
-     * @param $document
-     * @param mixed $params
+     * @deprecated
+     *
+     * @param Model\Document\PageSnippet|null $document
+     * @param array $params
      * @abstract
      *
-     * @return array
+     * @return mixed
      */
     public function getForWebserviceExport($document = null, $params = [])
     {
@@ -654,7 +663,7 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     }
 
     /**
-     * @param $inherited
+     * @param bool $inherited
      *
      * @return $this
      */
@@ -758,7 +767,9 @@ abstract class Tag extends Model\AbstractModel implements Model\Document\Tag\Tag
     }
 
     /**
-     * @param $data
+     * @deprecated
+     *
+     * @param array|object $data
      *
      * @return object
      */

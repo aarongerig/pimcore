@@ -28,7 +28,7 @@
     -webkit-box-sizing: content-box !important;
 }
 
-.cke_dialog {
+.cke_dialog_container {
     z-index: 100300 !important;
 }
 
@@ -98,6 +98,11 @@ input.cke_dialog_ui_input_tel {
     position: relative;
     top: 0;
     padding-bottom: 15px;
+    padding-top: 15px;
+}
+
+.pimcore_area_buttons.fixed.top:after {
+    top: 49px;
 }
 
 .pimcore_area_buttons.right {
@@ -113,8 +118,16 @@ input.cke_dialog_ui_input_tel {
 }
 
 .pimcore_area_buttons_inner{
+    height: 34px;
+    display: flex;
     background: #3c3f41;
     border-left: 1px solid #000;
+}
+
+.pimcore_area_buttons.right .pimcore_area_buttons_inner,
+.pimcore_area_buttons.left .pimcore_area_buttons_inner {
+    height: auto;
+    flex-direction: column;
 }
 
 .pimcore_area_buttons:after {
@@ -131,6 +144,10 @@ input.cke_dialog_ui_input_tel {
     left: 100%;
     border-left: 8px solid #000000;
     border-right: 0px solid #000000;
+}
+
+.pimcore_area_buttons.left:after {
+    left: 34px;
 }
 
 .pimcore_area_buttons.right:after {
@@ -446,6 +463,7 @@ input.cke_dialog_ui_input_tel {
     padding-bottom: 3px;
     background: #000;
     border-bottom: 1px solid #ccc;
+    cursor: move;
 }
 
 .pimcore_areablock_toolbar .x-btn-default-small:last-child {
@@ -526,6 +544,11 @@ input.cke_dialog_ui_input_tel {
 
 .pimcore_tag_input.empty, .pimcore_wysiwyg.empty, .pimcore_tag_textarea.empty {
     outline: 1px dashed #BABABA;
+}
+
+.editable-error {
+    outline: 2px dashed #ff5500 !important;
+    outline-offset: 5px;
 }
 
 .pimcore_wysiwyg.empty:after {

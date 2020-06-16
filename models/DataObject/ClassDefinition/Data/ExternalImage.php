@@ -120,10 +120,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
      * @see ResourcePersistenceAwareInterface::getDataForResource
      *
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
-     * @param mixed $params
+     * @param null|DataObject\Concrete $object
+     * @param array $params
      *
-     * @return string
+     * @return string|null
      */
     public function getDataForResource($data, $object = null, $params = [])
     {
@@ -138,10 +138,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
      * @see ResourcePersistenceAwareInterface::getDataFromResource
      *
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
-     * @param mixed $params
+     * @param null|DataObject\Concrete $object
+     * @param array $params
      *
-     * @return string
+     * @return Model\DataObject\Data\ExternalImage
      */
     public function getDataFromResource($data, $object = null, $params = [])
     {
@@ -158,7 +158,7 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
      * @see QueryResourcePersistenceAwareInterface::getDataForQueryResource
      *
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return string
@@ -172,10 +172,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
      * @see Data::getDataForEditmode
      *
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
-     * @return string
+     * @return string|null
      */
     public function getDataForEditmode($data, $object = null, $params = [])
     {
@@ -188,10 +188,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
 
     /**
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
-     * @param mixed $params
+     * @param null|DataObject\Concrete $object
+     * @param array $params
      *
-     * @return string
+     * @return string|null
      */
     public function getDataForGrid($data, $object = null, $params = [])
     {
@@ -202,10 +202,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
      * @see Data::getDataFromEditmode
      *
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
-     * @param mixed $params
+     * @param null|DataObject\Concrete $object
+     * @param array $params
      *
-     * @return string
+     * @return Model\DataObject\Data\ExternalImage
      */
     public function getDataFromEditmode($data, $object = null, $params = [])
     {
@@ -214,10 +214,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
 
     /**
      * @param string $data
-     * @param null|Model\DataObject\AbstractObject $object
-     * @param mixed $params
+     * @param null|DataObject\Concrete $object
+     * @param array $params
      *
-     * @return string
+     * @return Model\DataObject\Data\ExternalImage
      */
     public function getDataFromGridEditor($data, $object = null, $params = [])
     {
@@ -227,9 +227,9 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     /**
      * @see Data::getVersionPreview
      *
-     * @param string $data
-     * @param null|DataObject\AbstractObject $object
-     * @param mixed $params
+     * @param DataObject\Data\ExternalImage|null $data
+     * @param DataObject\Concrete|null $object
+     * @param array $params
      *
      * @return string
      */
@@ -247,7 +247,7 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
      *
      * @abstract
      *
-     * @param DataObject\AbstractObject $object
+     * @param DataObject\Concrete $object
      * @param array $params
      *
      * @return string
@@ -259,12 +259,12 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
             return $data->getUrl();
         }
 
-        return null;
+        return '';
     }
 
     /**
-     * @param $importValue
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param string $importValue
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return string
@@ -277,10 +277,12 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     /**
      * converts data to be exposed via webservices
      *
-     * @param string $object
+     * @deprecated
+     *
+     * @param DataObject\Concrete $object
      * @param mixed $params
      *
-     * @return mixed
+     * @return string|null
      */
     public function getForWebserviceExport($object, $params = [])
     {
@@ -288,10 +290,12 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     }
 
     /**
+     * @deprecated
+     *
      * @param mixed $value
-     * @param null $relatedObject
+     * @param Model\Element\AbstractElement $relatedObject
      * @param mixed $params
-     * @param null $idMapper
+     * @param Model\Webservice\IdMapperInterface|null $idMapper
      *
      * @return mixed|void
      *
@@ -303,7 +307,7 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     }
 
     /** True if change is allowed in edit mode.
-     * @param string $object
+     * @param DataObject\Concrete $object
      * @param mixed $params
      *
      * @return bool
@@ -314,10 +318,10 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     }
 
     /** Generates a pretty version preview (similar to getVersionPreview) can be either html or
-     * a image URL. See the ObjectMerger plugin documentation for details
+     * a image URL. See the https://github.com/pimcore/object-merger bundle documentation for details
      *
-     * @param $data
-     * @param null $object
+     * @param string $data
+     * @param DataObject\Concrete|null $object
      * @param mixed $params
      *
      * @return array|string
@@ -332,7 +336,7 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     }
 
     /**
-     * @param Model\DataObject\ClassDefinition\Data $masterDefinition
+     * @param Model\DataObject\ClassDefinition\Data\ExternalImage $masterDefinition
      */
     public function synchronizeWithMasterDefinition(Model\DataObject\ClassDefinition\Data $masterDefinition)
     {
@@ -342,16 +346,12 @@ class ExternalImage extends Data implements ResourcePersistenceAwareInterface, Q
     }
 
     /**
-     * @param DataObject\Data\ExternalImage $data
+     * @param DataObject\Data\ExternalImage|null $data
      *
      * @return bool
      */
     public function isEmpty($data)
     {
-        if ($data instanceof DataObject\Data\ExternalImage and $data->getUrl()) {
-            return false;
-        }
-
-        return true;
+        return !($data instanceof DataObject\Data\ExternalImage && $data->getUrl());
     }
 }

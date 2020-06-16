@@ -55,8 +55,9 @@ class Newsletter
     ): Mail {
         $mail = new Mail();
         $mail->setIgnoreDebugMode(true);
+        $config = Config::getSystemConfiguration('newsletter');
 
-        if (Config::getSystemConfig()->newsletter->usespecific) {
+        if ($config['use_specific']) {
             $mail->init('newsletter');
         }
 
@@ -134,6 +135,7 @@ class Newsletter
     public static function sendNewsletterDocumentBasedMail(Mail $mail, SendingParamContainer $sendingContainer): void
     {
         $mailAddress = $sendingContainer->getEmail();
+        $config = Config::getSystemConfiguration('newsletter');
 
         if (!self::to_domain_exists($mailAddress)) {
             Logger::err('E-Mail address invalid: ' . self::obfuscateEmail($mailAddress));
@@ -145,7 +147,7 @@ class Newsletter
 
             $mailer = null;
             // check if newsletter specific mailer is needed
-            if (Config::getSystemConfig()->newsletter->usespecific) {
+            if ($config['use_specific']) {
                 $mailer = Pimcore::getContainer()->get('swiftmailer.mailer.newsletter_mailer');
             }
 
@@ -178,9 +180,9 @@ class Newsletter
     }
 
     /**
-     * @param $email
+     * @param string $email
      *
-     * @return mixed
+     * @return string
      */
     protected static function obfuscateEmail($email)
     {
@@ -192,8 +194,8 @@ class Newsletter
     /**
      * @param Model\Document\Newsletter $newsletter
      * @param DataObject\Concrete $object
-     * @param null $emailAddress
-     * @param null $hostUrl
+     * @param string|null $emailAddress
+     * @param string|null $hostUrl
      *
      * @throws Exception
      *
@@ -212,6 +214,8 @@ class Newsletter
             E_USER_DEPRECATED
         );
 
+        $config = Config::getSystemConfiguration('newsletter');
+
         $params = [
             'gender' => $object->getGender(),
             'firstname' => $object->getFirstname(),
@@ -224,7 +228,7 @@ class Newsletter
         $mail = new Mail();
         $mail->setIgnoreDebugMode(true);
 
-        if (Config::getSystemConfig()->newsletter->usespecific) {
+        if ($config['use_specific']) {
             $mail->init('newsletter');
         }
 
@@ -271,7 +275,7 @@ class Newsletter
     }
 
     /**
-     * @param null $classId
+     * @param string|null $classId
      *
      * @throws Exception
      */
@@ -322,9 +326,9 @@ class Newsletter
     }
 
     /**
-     * @param $params
+     * @param array $params
      *
-     * @return mixed
+     * @return DataObject\Concrete
      *
      * @throws Exception
      */
@@ -387,8 +391,8 @@ class Newsletter
     }
 
     /**
-     * @param $object
-     * @param $mailDocument
+     * @param DataObject\Concrete $object
+     * @param Document $mailDocument
      * @param array $params
      *
      * @throws Exception
@@ -414,7 +418,7 @@ class Newsletter
     }
 
     /**
-     * @param $token
+     * @param string $token
      *
      * @return DataObject\Concrete|null
      */
@@ -424,8 +428,8 @@ class Newsletter
         $token = str_replace('~', '=', $token); // base64 can contain = which isn't safe in URL's
 
         $data = json_decode(base64_decode($token), true);
-        /** @var DataObject\Concrete $object */
-        if ($data && $object = DataObject::getById($data['id'])) {
+
+        if ($data && $object = DataObject\Concrete::getById($data['id'])) {
             if ($version = $object->getLatestVersion()) {
                 $object = $version->getData();
             }
@@ -527,8 +531,8 @@ class Newsletter
     }
 
     /**
-     * @param $object
-     * @param $title
+     * @param DataObject\Concrete $object
+     * @param string $title
      */
     public function addNoteOnObject($object, $title): void
     {

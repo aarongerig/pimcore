@@ -21,7 +21,9 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
     object: {},
     gridType: 'asset',
 
-    initialize: function (element, searchType) {
+    initialize: function ($super, element, searchType) {
+        $super();
+
         this.element = element;
         this.searchType = searchType;
         this.classId = element.id;
@@ -37,8 +39,13 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
                 title: t("list"),
                 iconCls: "pimcore_material_icon_list pimcore_material_icon",
                 border: false,
-                layout: "fit"
+                layout: "border"
             });
+
+            var user = pimcore.globalmanager.get("user");
+            if(user.isAllowed("tags_search")) {
+                this.layout.add(this.getTagsPanel());
+            }
 
 
             this.layout.on("afterrender", this.getGrid.bind(this, false));
@@ -54,7 +61,7 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
 
     getGrid: function () {
         Ext.Ajax.request({
-            url: "/admin/asset-helper/grid-get-column-config",
+            url: Routing.generate('pimcore_admin_asset_assethelper_gridgetcolumnconfig'),
             params: {
                 id: this.element.data.id,
                 type: "asset",
@@ -115,7 +122,7 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
 
         var gridHelper = new pimcore.asset.helpers.grid(
             fields,
-            "/admin/asset/grid-proxy",
+            Routing.generate('pimcore_admin_asset_gridproxy'),
             {
                 language: this.gridLanguage,
                 // limit: itemsPerPage
@@ -137,8 +144,7 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
             this.store.sort(this.sortinfo.field, this.sortinfo.direction);
         }
 
-        this.store.getProxy().extraParams = {
-            limit: itemsPerPage,
+        let extraParams = {
             folderId: this.element.data.id,
             "fields[]": fieldParam,
             language: this.gridLanguage,
@@ -146,6 +152,13 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
             only_unreferenced: this.onlyUnreferenced
         };
 
+        //tags filter
+        if (this.tagsPanel) {
+            extraParams["tagIds[]"] = this.tagsTree.getCheckedTagIds();
+            extraParams["considerChildTags"] = this.considerChildTags;
+        }
+
+        this.store.getProxy().extraParams = extraParams;
         this.store.setPageSize(itemsPerPage);
 
         if (existingFilters) {
@@ -153,10 +166,6 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
         }
 
         var gridColumns = gridHelper.getGridColumns();
-
-        // add filters
-        this.gridfilters = gridHelper.getGridFilters();
-
 
         this.pagingtoolbar = pimcore.helpers.grid.buildDefaultPagingToolbar(this.store, {pageSize: itemsPerPage});
 
@@ -248,12 +257,13 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
 
         this.grid = Ext.create('Ext.grid.Panel', {
             frame: false,
-            autoScroll: true,
             store: this.store,
             columnLines: true,
             stripeRows: true,
             bodyCls: "pimcore_editable_grid",
             columns : gridColumns,
+            enableLocking: true,
+            bufferedRenderer: false,
             plugins: [this.cellEditing, 'pimcore.gridfilters'],
             trackMouseOver: true,
             bbar: this.pagingtoolbar,
@@ -292,15 +302,32 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
         this.grid.on("columnresize", function () {
             this.saveColumnConfigButton.show();
         }.bind(this));
+        this.grid.on("lockcolumn", function () {
+            this.saveColumnConfigButton.show()
+        }.bind(this));
+        this.grid.on("unlockcolumn", function () {
+            this.saveColumnConfigButton.show()
+        }.bind(this));
 
         this.grid.on("rowcontextmenu", this.onRowContextmenu);
 
         this.grid.on("afterrender", function (grid) {
-            this.updateGridHeaderContextMenu(grid);
+            var grids = grid.items.items;
+            for (var i = 0; i < grids.length; i++) {
+                this.updateGridHeaderContextMenu(grids[i]);
+            }
         }.bind(this));
 
-        this.layout.removeAll();
-        this.layout.add(this.grid);
+        this.layout.remove("gridPanel_" + this.element.data.id);
+
+        this.gridPanel = new Ext.Panel({
+            id: "gridPanel_" + this.element.data.id,
+            region: "center",
+            layout: "fit",
+            items: [this.grid],
+        });
+
+        this.layout.add(this.gridPanel);
         this.layout.updateLayout();
 
         if (save) {
@@ -425,33 +452,6 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
         return buttons;
     },
 
-    getColumnWidth: function(field, defaultValue) {
-        if (field.width) {
-            return field.width;
-        } else if(field.layout && field.layout.width) {
-            return field.layout.width;
-        } else {
-            return defaultValue;
-        }
-    },
-
-    getExportButtons: function () {
-        var buttons = [];
-        pimcore.globalmanager.get("pimcore.asset.gridexport").forEach(function (exportType) {
-            buttons.push({
-                text: t(exportType.text),
-                iconCls: exportType.icon || "pimcore_icon_export",
-                handler: function () {
-                    pimcore.helpers.exportWarning(exportType, function (settings) {
-                        this.exportPrepare(settings, exportType);
-                    }.bind(this));
-                }.bind(this),
-            })
-        }.bind(this));
-
-        return buttons;
-    },
-
     getGridConfig: function ($super) {
         var config = $super();
         config.onlyDirectChildren = this.onlyDirectChildren;
@@ -519,8 +519,8 @@ pimcore.asset.listfolder = Class.create(pimcore.asset.helpers.gridTabAbstract, {
                 handler: function (data) {
                     var selectedRows = grid.getSelectionModel().getSelection();
                     for (var i = 0; i < selectedRows.length; i++) {
-                        var data = selectedRows[i].data;
-                        pimcore.helpers.openAsset(data.id, data.get("type~system"));
+                        var data = selectedRows[i];
+                        pimcore.helpers.openAsset(data.id, data.data['type~system']);
                     }
                 }.bind(this, data)
             }));

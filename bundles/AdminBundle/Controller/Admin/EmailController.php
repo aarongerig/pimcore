@@ -30,7 +30,7 @@ use Symfony\Component\Routing\Annotation\Route;
 class EmailController extends AdminController
 {
     /**
-     * @Route("/email-logs", methods={"GET", "POST"})
+     * @Route("/email-logs", name="pimcore_admin_email_emaillogs", methods={"GET", "POST"})
      *
      * @param Request $request
      *
@@ -106,7 +106,7 @@ class EmailController extends AdminController
     }
 
     /**
-     * @Route("/show-email-log", methods={"GET"})
+     * @Route("/show-email-log", name="pimcore_admin_email_showemaillog", methods={"GET"})
      *
      * @param Request $request
      * @param Profiler $profiler
@@ -148,6 +148,10 @@ class EmailController extends AdminController
             }
 
             return $this->adminJson($params);
+        } elseif ($request->get('type') == 'details') {
+            $data = $emailLog->getObjectVars();
+
+            return $this->adminJson($data);
         } else {
             return new Response('No Type specified');
         }
@@ -155,7 +159,7 @@ class EmailController extends AdminController
 
     /**
      * @param array $data
-     * @param $fullEntry
+     * @param array $fullEntry
      */
     protected function enhanceLoggingData(&$data, &$fullEntry = null)
     {
@@ -232,7 +236,7 @@ class EmailController extends AdminController
     }
 
     /**
-     * @Route("/delete-email-log", methods={"DELETE"})
+     * @Route("/delete-email-log", name="pimcore_admin_email_deleteemaillog", methods={"DELETE"})
      *
      * @param Request $request
      *
@@ -259,7 +263,7 @@ class EmailController extends AdminController
     }
 
     /**
-     * @Route("/resend-email", methods={"POST"})
+     * @Route("/resend-email", name="pimcore_admin_email_resendemail", methods={"POST"})
      *
      * @param Request $request
      *
@@ -279,8 +283,15 @@ class EmailController extends AdminController
         if ($emailLog instanceof Tool\Email\Log) {
             $mail = new Mail();
             $mail->preventDebugInformationAppending();
-            $mail->disableLogging();
             $mail->setIgnoreDebugMode(true);
+
+            if (!empty($request->get('to'))) {
+                $emailLog->setTo(null);
+                $emailLog->setCc(null);
+                $emailLog->setBcc(null);
+            } else {
+                $mail->disableLogging();
+            }
 
             if ($html = $emailLog->getHtmlLog()) {
                 $mail->setBodyHtml($html);
@@ -291,8 +302,13 @@ class EmailController extends AdminController
             }
 
             foreach (['From', 'To', 'Cc', 'Bcc', 'ReplyTo'] as $field) {
-                $getter = 'get' . $field;
-                $values = \Pimcore\Helper\Mail::parseEmailAddressField($emailLog->{$getter}());
+                if (!$values = $request->get(strtolower($field))) {
+                    $getter = 'get' . $field;
+                    $values = $emailLog->{$getter}();
+                }
+
+                $values = \Pimcore\Helper\Mail::parseEmailAddressField($values);
+
                 if (!empty($values)) {
                     list($value) = $values;
                     if ($value) {
@@ -344,7 +360,7 @@ class EmailController extends AdminController
     }
 
     /**
-     * @Route("/send-test-email", methods={"POST"})
+     * @Route("/send-test-email", name="pimcore_admin_email_sendtestemail", methods={"POST"})
      *
      * @param Request $request
      *
@@ -409,7 +425,7 @@ class EmailController extends AdminController
     }
 
     /**
-     * @Route("/blacklist", methods={"POST"})
+     * @Route("/blacklist", name="pimcore_admin_email_blacklist", methods={"POST"})
      *
      * @param Request $request
      *
@@ -482,12 +498,14 @@ class EmailController extends AdminController
                 'total' => $list->getTotalCount()
             ]);
         }
+
+        return $this->adminJson(['success' => false]);
     }
 
     /**
      * @param array $params
      *
-     * @return $data
+     * @return array
      */
     protected function parseLoggingParamObject($params)
     {

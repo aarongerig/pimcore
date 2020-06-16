@@ -36,9 +36,18 @@ and may be extended:
   - `Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Config\DefaultFindologic`: Provides a default [findologic](https://www.findologic.com/) 
   implementation of the product index.
 
-- **Configuring Assortment Tenants within configuration:** 
+- **Configuring Assortment Tenants within configuration:**
 Each tenant has to be configured within the `index_service` configuration by defining the tenant config class and index 
 attributes. Depending on the *Product Index* implementation, additional configuration may be necessary. 
+
+- **Declare the service:**
+You need to declare the service as well so the class can be used. On your service configuration or for instance at the top of the ecommerce configuration file:
+```
+services:
+    MyBundle\Service\MySubtenantConfig:
+        calls:
+            - [setAttributeFactory, ['@Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Config\AttributeFactory']]
+```
 
 
 ### Setting current Assortment Tenant for Frontend
@@ -49,7 +58,7 @@ provides following methods to set the current Assortment Tenant when working wit
     /**
      * sets current assortment tenant which is used for indexing and product lists
      *
-     * @param $tenant string
+     * @param string $tenant
      * @return mixed
      */
     public function setCurrentAssortmentTenant($tenant);
@@ -64,7 +73,7 @@ provides following methods to set the current Assortment Tenant when working wit
     /**
      * sets current assortment sub tenant which is used for indexing and product lists
      *
-     * @param $subTenant string
+     * @param string $subTenant
      * @return mixed
      */
     public function setCurrentAssortmentSubTenant($subTenant);
@@ -77,7 +86,7 @@ provides following methods to set the current Assortment Tenant when working wit
     public function getCurrentAssortmentSubTenant();
 ```
 
-The current Assortment Tenant have to be set in the application controllers, e.g. after the login of a specific customer. 
+The current Assortment Tenant has to be set in the application controllers, e.g. after the login of a specific customer. 
 The Index Service provides the corresponding Product List implementation based on the current tenant.
 
 
@@ -135,7 +144,7 @@ In order to populate the additional mapping data, also following methods have to
      * in case of subtenants returns a data structure containing all sub tenants
      *
      * @param IndexableInterface $object
-     * @param null $subObjectId
+     * @param int|null $subObjectId
      *
      * @return mixed $subTenantData
      */
@@ -165,7 +174,7 @@ In order to populate the additional mapping data, the following method has to be
      * in case of subtenants returns a data structure containing all sub tenants
      *
      * @param IndexableInterface $object
-     * @param null $subObjectId
+     * @param int|null $subObjectId
      *
      * @return array $subTenantData
      */

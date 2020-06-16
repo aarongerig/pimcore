@@ -158,7 +158,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
     }
 
     /**
-     * @param $maxValue
+     * @param string|int|null $maxValue
      *
      * @return $this
      *
@@ -180,7 +180,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
     }
 
     /**
-     * @return int
+     * @return null
      */
     public function getDefaultValue()
     {
@@ -243,7 +243,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
      * @see ResourcePersistenceAwareInterface::getDataForResource
      *
      * @param float|null $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return float|null
@@ -261,7 +261,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
      * @see ResourcePersistenceAwareInterface::getDataFromResource
      *
      * @param float|null $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return float|null
@@ -279,7 +279,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
      * @see QueryResourcePersistenceAwareInterface::getDataForQueryResource
      *
      * @param float|null $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return float|null
@@ -293,7 +293,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
      * @see Data::getDataForEditmode
      *
      * @param float|null $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return float|null
@@ -307,7 +307,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
      * @see Data::getDataFromEditmode
      *
      * @param float|null $data
-     * @param null|Model\DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
      * @return float|null
@@ -333,14 +333,14 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
      * @see Data::getVersionPreview
      *
      * @param float|null $data
-     * @param null|DataObject\AbstractObject $object
+     * @param null|DataObject\Concrete $object
      * @param mixed $params
      *
-     * @return float|null
+     * @return string
      */
     public function getVersionPreview($data, $object = null, $params = [])
     {
-        return $data;
+        return (string)$data;
     }
 
     /**
@@ -363,7 +363,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
     }
 
     /** True if change is allowed in edit mode.
-     * @param string $object
+     * @param DataObject\Concrete $object
      * @param mixed $params
      *
      * @return bool
@@ -374,7 +374,7 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
     }
 
     /**
-     * @param DataObject\ClassDefinition\Data $masterDefinition
+     * @param DataObject\ClassDefinition\Data\Slider $masterDefinition
      */
     public function synchronizeWithMasterDefinition(DataObject\ClassDefinition\Data $masterDefinition)
     {
@@ -383,5 +383,10 @@ class Slider extends Data implements ResourcePersistenceAwareInterface, QueryRes
         $this->vertical = $masterDefinition->vertical;
         $this->increment = $masterDefinition->increment;
         $this->decimalPrecision = $masterDefinition->decimalPrecision;
+    }
+
+    public function isFilterable(): bool
+    {
+        return true;
     }
 }

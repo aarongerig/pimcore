@@ -101,7 +101,6 @@ pimcore.helpers.openAsset = function (id, type, options) {
 pimcore.helpers.closeAsset = function (id) {
 
     try {
-        var tabPanel = Ext.getCmp("pimcore_panel_tabs");
         var tabId = "asset_" + id;
         var panel = Ext.getCmp(tabId);
         if (panel) {
@@ -137,7 +136,6 @@ pimcore.helpers.openDocument = function (id, type, options) {
 
 pimcore.helpers.closeDocument = function (id) {
     try {
-        var tabPanel = Ext.getCmp("pimcore_panel_tabs");
         var tabId = "document_" + id;
         var panel = Ext.getCmp(tabId);
         if (panel) {
@@ -177,7 +175,6 @@ pimcore.helpers.openObject = function (id, type, options) {
 
 pimcore.helpers.closeObject = function (id) {
     try {
-        var tabPanel = Ext.getCmp("pimcore_panel_tabs");
         var tabId = "object_" + id;
         var panel = Ext.getCmp(tabId);
         if (panel) {
@@ -191,10 +188,10 @@ pimcore.helpers.closeObject = function (id) {
     }
 };
 
-pimcore.helpers.updateObjectStyle = function (id, treeData) {
+pimcore.helpers.updateTreeElementStyle = function (type, id, treeData) {
     if (treeData) {
 
-        var key = "object_" + id;
+        var key = type + "_" + id;
         if (pimcore.globalmanager.exists(key)) {
             var editMask = pimcore.globalmanager.get(key);
             if (editMask.tab) {
@@ -208,7 +205,7 @@ pimcore.helpers.updateObjectStyle = function (id, treeData) {
             }
         }
 
-        var treeNames = pimcore.elementservice.getElementTreeNames("object");
+        var treeNames = pimcore.elementservice.getElementTreeNames(type);
 
         for (var index = 0; index < treeNames.length; index++) {
             var treeName = treeNames[index];
@@ -226,6 +223,10 @@ pimcore.helpers.updateObjectStyle = function (id, treeData) {
 
                 if (typeof treeData.iconCls !== "undefined") {
                     record.set("iconCls", treeData.iconCls);
+                }
+
+                if (typeof treeData.qtipCfg !== "undefined") {
+                    record.set("qtipCfg", treeData.qtipCfg);
                 }
             }
         }
@@ -312,7 +313,7 @@ pimcore.helpers.openElement = function (idOrPath, type, subtype) {
         }
     } else {
         Ext.Ajax.request({
-            url: "/admin/element/get-subtype",
+            url: Routing.generate('pimcore_admin_element_getsubtype'),
             params: {
                 id: idOrPath,
                 type: type
@@ -388,7 +389,11 @@ pimcore.helpers.getTreeNodeLoadingIndicatorElements = function (type, id) {
 
 pimcore.helpers.treeNodeLoadingIndicatorTimeouts = {};
 
-pimcore.helpers.addTreeNodeLoadingIndicator = function (type, id) {
+pimcore.helpers.addTreeNodeLoadingIndicator = function (type, id, disableExpander) {
+
+    if(disableExpander !== false) {
+        disableExpander = true;
+    }
 
     pimcore.helpers.treeNodeLoadingIndicatorTimeouts[type + id] = window.setTimeout(function () {
         // display loading indicator on treenode
@@ -397,6 +402,9 @@ pimcore.helpers.addTreeNodeLoadingIndicator = function (type, id) {
             var iconEl = iconEls[index];
             if (iconEl) {
                 iconEl.addCls("pimcore_tree_node_loading_indicator");
+                if(disableExpander) {
+                    iconEl.up('.x-grid-cell').addCls('pimcore_treenode_hide_plus_button');
+                }
             }
         }
     }, 200);
@@ -412,8 +420,21 @@ pimcore.helpers.removeTreeNodeLoadingIndicator = function (type, id) {
         var iconEl = iconEls[index];
         if (iconEl) {
             iconEl.removeCls("pimcore_tree_node_loading_indicator");
+            iconEl.up('.x-grid-cell').removeCls('pimcore_treenode_hide_plus_button');
         }
     }
+};
+
+pimcore.helpers.hasTreeNodeLoadingIndicator = function (type, id) {
+    var iconEls = pimcore.helpers.getTreeNodeLoadingIndicatorElements(type, id);
+    for (var index = 0; index < iconEls.length; index++) {
+        var iconEl = iconEls[index];
+        if (iconEl) {
+            return iconEl.hasCls("pimcore_tree_node_loading_indicator");
+        }
+    }
+
+    return false;
 };
 
 
@@ -443,12 +464,14 @@ pimcore.helpers.getValidFilenameCache = {};
 
 pimcore.helpers.getValidFilename = function (value, type) {
 
+    value = value.trim();
+
     if (pimcore.helpers.getValidFilenameCache[value + type]) {
         return pimcore.helpers.getValidFilenameCache[value + type];
     }
 
     var response = Ext.Ajax.request({
-        url: "/admin/misc/get-valid-filename",
+        url: Routing.generate('pimcore_admin_misc_getvalidfilename'),
         async: false,
         params: {
             value: value,
@@ -681,7 +704,7 @@ pimcore.helpers.handleF5 = function (keyCode, e) {
     }
 
     var date = new Date();
-    location.href = "/admin/?_dc=" + date.getTime();
+    location.href = Routing.generate('pimcore_admin_index', {'_dc': date.getTime()});
 };
 
 pimcore.helpers.lockManager = function (cid, ctype, csubtype, data) {
@@ -700,7 +723,7 @@ pimcore.helpers.lockManager = function (cid, ctype, csubtype, data) {
         function (lock, buttonValue) {
             if (buttonValue == "yes") {
                 Ext.Ajax.request({
-                    url: "/admin/element/unlock-element",
+                    url: Routing.generate('pimcore_admin_element_unlockelement'),
                     method: 'PUT',
                     params: {
                         id: lock[0],
@@ -726,7 +749,7 @@ pimcore.helpers.closeAllUnmodified = function () {
             }
         });
     }
-    ;
+
 
     pimcore.helpers.closeAllElements(unmodifiedElements);
 };
@@ -773,7 +796,7 @@ pimcore.helpers.itemselector = function (muliselect, callback, restrictions, con
 pimcore.helpers.activateMaintenance = function () {
 
     Ext.Ajax.request({
-        url: "/admin/misc/maintenance?activate=true",
+        url: Routing.generate('pimcore_admin_misc_maintenance', {activate: true}),
         method: "POST"
     });
 
@@ -786,7 +809,7 @@ pimcore.helpers.activateMaintenance = function () {
 pimcore.helpers.deactivateMaintenance = function () {
 
     Ext.Ajax.request({
-        url: "/admin/misc/maintenance?deactivate=true",
+        url: Routing.generate('pimcore_admin_misc_maintenance', {deactivate: true}),
         method: "POST"
     });
 
@@ -908,7 +931,10 @@ pimcore.helpers.openMemorizedTabs = function () {
 
 pimcore.helpers.assetSingleUploadDialog = function (parent, parentType, success, failure, context) {
 
-    var url = '/admin/asset/add-asset-compatibility?parent' + ucfirst(parentType) + '=' + parent;
+    var params = {};
+    params['parent' . ucfirst(parentType)] = parent;
+
+    var url = Routing.generate('pimcore_admin_asset_addassetcompatibility', params);
     if (context) {
         url += "&context=" + Ext.encode(context);
     }
@@ -1018,7 +1044,8 @@ pimcore.helpers.searchAction = function (type) {
     pimcore.helpers.itemselector(false, function (selection) {
             pimcore.helpers.openElement(selection.id, selection.type, selection.subtype);
         }, {type: [type]},
-        {moveToTab: true,
+        {
+            asTab: true,
             context: {
                 scope: "globalSearch"
             }
@@ -1061,7 +1088,7 @@ pimcore.helpers.generatePagePreview = function (id, path, callback) {
 
     if (pimcore.settings.htmltoimage) {
         Ext.Ajax.request({
-            url: '/admin/page/generate-screenshot',
+            url: Routing.generate('pimcore_admin_document_page_generatescreenshot'),
             method: "POST",
             ignoreErrors: true,
             params: {
@@ -1379,7 +1406,11 @@ pimcore.helpers.uploadAssetFromFileObject = function (file, url, callbackSuccess
     // these wrappers simulate the jQuery behavior
     var successWrapper = function (ev) {
         var data = JSON.parse(request.responseText);
-        callbackSuccess(data, request.statusText, request);
+        if(ev.currentTarget.status < 400 && data.success === true) {
+            callbackSuccess(data, request.statusText, request);
+        } else {
+            callbackFailure(request, request.statusText, ev);
+        }
     };
 
     var errorWrapper = function (ev) {
@@ -1432,7 +1463,7 @@ pimcore.helpers.searchAndMove = function (parentId, callback, type) {
                     };
                 }
                 jobs.push([{
-                    url: "/admin/" + type + "/update",
+                    url: Routing.getBaseUrl() + "/admin/" + type + "/update",
                     method: 'PUT',
                     params: params
                 }]);
@@ -1448,13 +1479,14 @@ pimcore.helpers.searchAndMove = function (parentId, callback, type) {
         });
 
         this.addChildWindow = new Ext.Window({
+            title: t("move"),
             layout: 'fit',
-            width: 500,
+            width: 200,
             bodyStyle: "padding: 10px;",
             closable: false,
             plain: true,
-            modal: true,
-            items: [this.addChildProgressBar]
+            items: [this.addChildProgressBar],
+            listeners: pimcore.helpers.getProgressWindowListeners()
         });
 
         this.addChildWindow.show();
@@ -1695,7 +1727,7 @@ pimcore.helpers.sendTestEmail = function (from, to, subject, emailType, document
 
         win.disable();
         Ext.Ajax.request({
-            url: "/admin/email/send-test-email",
+            url: Routing.generate('pimcore_admin_email_sendtestemail'),
             params: params,
             method: "post",
             success: function () {
@@ -2271,10 +2303,24 @@ pimcore.helpers.showAbout = function () {
 
 pimcore.helpers.markColumnConfigAsFavourite = function (objectId, classId, gridConfigId, searchType, global, type) {
 
-    try {
+    type = type || "object";
 
-        type = type || "object";
-        var url = '/admin/' + type + '-helper/grid-mark-favourite-column-config';
+    var assetRoute = 'pimcore_admin_asset_assethelper_gridmarkfavouritecolumnconfig';
+    var objectRoute = 'pimcore_admin_dataobject_dataobjecthelper_gridmarkfavouritecolumnconfig';
+    var route = null;
+
+    if (type === 'object') {
+        route = objectRoute;
+    }
+    else if (type === 'asset') {
+        route = assetRoute;
+    }
+    else {
+        throw new Error('Unknown type given, given "' + type + '"');
+    }
+
+    try {
+        var url = Routing.generate(route);
 
         Ext.Ajax.request({
             url: url,
@@ -2326,7 +2372,7 @@ pimcore.helpers.removeOtherConfigs = function (objectId, classId, gridConfigId, 
         fn: function (btn) {
             if (btn == "yes") {
                 Ext.Ajax.request({
-                    url: '/admin/object-helper/grid-config-apply-to-all',
+                    url: Routing.generate('pimcore_admin_dataobject_dataobjecthelper_gridconfigapplytoall'),
                     method: "post",
                     params: {
                         objectId: objectId,
@@ -2343,6 +2389,21 @@ pimcore.helpers.removeOtherConfigs = function (objectId, classId, gridConfigId, 
 
 pimcore.helpers.saveColumnConfig = function (objectId, classId, configuration, searchType, button, callback, settings, type) {
 
+    type = type || "object";
+
+    var assetRoute = 'pimcore_admin_asset_assethelper_gridsavecolumnconfig';
+    var objectRoute = 'pimcore_admin_dataobject_dataobjecthelper_gridsavecolumnconfig';
+    var route = null;
+
+    if (type === 'object') {
+        route = objectRoute;
+    }
+    else if (type === 'asset') {
+        route = assetRoute;
+    }
+    else {
+        throw new Error('Unknown type given, given "' + type + '"');
+    }
 
     try {
         type = type || "object";
@@ -2355,7 +2416,7 @@ pimcore.helpers.saveColumnConfig = function (objectId, classId, configuration, s
             type: type
         };
 
-        var url = '/admin/' + type + '-helper/grid-save-column-config';
+        var url = Routing.generate(route);
 
         Ext.Ajax.request({
             url: url,
@@ -2465,6 +2526,10 @@ pimcore.helpers.requestNicePathDataGridDecorator = function (gridView, targets) 
 };
 
 pimcore.helpers.requestNicePathData = function (source, targets, config, fieldConfig, context, decorator, responseHandler) {
+    if (context && context['containerType'] == "batch") {
+        return;
+    }
+
     if (!config.loadEditModeData && (typeof targets === "undefined" || !fieldConfig.pathFormatterClass)) {
         return;
     }
@@ -2493,7 +2558,7 @@ pimcore.helpers.requestNicePathData = function (source, targets, config, fieldCo
 
     Ext.Ajax.request({
         method: 'POST',
-        url: "/admin/element/get-nice-path",
+        url: Routing.generate('pimcore_admin_element_getnicepath'),
         params: {
             source: Ext.encode(source),
             targets: elementData,
@@ -2658,10 +2723,7 @@ pimcore.helpers.isValidPassword = function (pass) {
 };
 
 pimcore.helpers.getDeeplink = function (type, id, subtype) {
-    return window.location.protocol + "//"
-        + window.location.hostname
-        + (window.location.port && window.location.port !== "80" && window.location.port !== "443" ? ":" + window.location.port : "")
-        + "/admin/login/deeplink?" + type + "_" + id + "_" + subtype;
+    return Routing.generate('pimcore_admin_login_deeplink', {}, true) + '?' + type + "_" + id + "_" + subtype;
 };
 
 pimcore.helpers.showElementHistory = function() {
@@ -2885,7 +2947,7 @@ pimcore.helpers.keyBindingMapping = {
 };
 
 pimcore.helpers.showPermissionError = function(permission) {
-    Ext.MessageBox.alert(t("error"), sprintf(t('permission_missing'), ts(permission)));
+    Ext.MessageBox.alert(t("error"), sprintf(t('permission_missing'), t(permission)));
 };
 
 pimcore.helpers.registerAssetDnDSingleUpload = function (element, parent, parentType, success, failure, context) {
@@ -2940,16 +3002,19 @@ pimcore.helpers.registerAssetDnDSingleUpload = function (element, parent, parent
                     win.add(pbar);
                     win.updateLayout();
 
-                    var uploadUrl = "/admin/asset/add-asset?";
+                    var params = {};
+
                     if(parentType === 'path') {
-                        uploadUrl += "parentPath=" + parent;
+                        params['parentPath'] = parent;
                     } else if (parentType === 'id') {
-                        uploadUrl += "parentId=" + parent;
+                        params['parentId'] = parent;
                     }
 
                     if (context) {
-                        uploadUrl += "&context=" + Ext.encode(context);
+                        params['context'] = Ext.encode(context);
                     }
+
+                    var uploadUrl = Routing.generate('pimcore_admin_asset_addasset', params);
 
                     pimcore.helpers.uploadAssetFromFileObject(file, uploadUrl,
                         function (evt) {
@@ -2971,7 +3036,8 @@ pimcore.helpers.registerAssetDnDSingleUpload = function (element, parent, parent
                         },
                         function (evt) {
                             // error
-                            pimcore.helpers.showNotification(t("error"), e["responseText"], "error");
+                            var res = Ext.decode(evt["responseText"]);
+                            pimcore.helpers.showNotification(t("error"), res.message ? res.message : t("error"), "error", evt["responseText"]);
                             win.close();
                             failure(evt);
                         }
@@ -3075,7 +3141,42 @@ pimcore.helpers.treeToolTipShow = function (el, record, item) {
     }
 };
 
+pimcore.helpers.getAssetMetadataDataTypes = function (allowIn) {
+    var result = [];
+    for (var property in pimcore.asset.metadata.data) {
+        // filter out base class
+        if (property !== "data" && pimcore.asset.metadata.data.hasOwnProperty(property)) {
+            if (pimcore.asset.metadata.data[property].prototype.allowIn[allowIn]) {
+                result.push(property);
+            }
+        }
+    }
+    return result;
+};
+
 pimcore.helpers.treeToolTipHide = function () {
     Ext.get('pimcore_tooltip').hide();
 };
 
+pimcore.helpers.progressWindowOffsets = [-50];
+
+pimcore.helpers.getProgressWindowListeners = function () {
+    return {
+        show: function(win) {
+            let winY = pimcore.helpers.progressWindowOffsets.reduce(function(a, b) {
+                return Math.min(a, b);
+            });
+
+            win.alignTo(Ext.getBody(), "br-br", [-40, winY]);
+            let newOffset = winY - (win.getHeight()+20);
+            pimcore.helpers.progressWindowOffsets.push(newOffset);
+            win.myProgressWinOffset = newOffset;
+        },
+        destroy: function(win) {
+            let index = pimcore.helpers.progressWindowOffsets.indexOf(win.myProgressWinOffset);
+            if (index !== -1) {
+                pimcore.helpers.progressWindowOffsets.splice(index, 1);
+            }
+        }
+    };
+};

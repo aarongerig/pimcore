@@ -16,20 +16,20 @@ namespace Pimcore\Bundle\CoreBundle\EventListener\Frontend;
 
 use Pimcore\Bundle\AdminBundle\Security\User\UserLoader;
 use Pimcore\Bundle\CoreBundle\EventListener\Traits\PimcoreContextAwareTrait;
-use Pimcore\Config;
 use Pimcore\Extension\Bundle\PimcoreBundleManager;
 use Pimcore\Http\Request\Resolver\DocumentResolver;
 use Pimcore\Http\Request\Resolver\EditmodeResolver;
 use Pimcore\Http\Request\Resolver\PimcoreContextResolver;
 use Pimcore\Model\Document;
-use Pimcore\Model\User;
 use Pimcore\Version;
 use Psr\Log\LoggerAwareTrait;
+use Symfony\Component\Asset\Packages;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Routing\RouterInterface;
 
 /**
  * Modifies responses for editmode
@@ -60,6 +60,16 @@ class EditmodeListener implements EventSubscriberInterface
     protected $bundleManager;
 
     /**
+     * @var RouterInterface
+     */
+    protected $router;
+
+    /**
+     * @var Packages
+     */
+    protected $package;
+
+    /**
      * @var array
      */
     protected $contentTypes = [
@@ -71,17 +81,23 @@ class EditmodeListener implements EventSubscriberInterface
      * @param DocumentResolver $documentResolver
      * @param UserLoader $userLoader
      * @param PimcoreBundleManager $bundleManager
+     * @param RouterInterface $router
+     * @param Packages $package
      */
     public function __construct(
         EditmodeResolver $editmodeResolver,
         DocumentResolver $documentResolver,
         UserLoader $userLoader,
-        PimcoreBundleManager $bundleManager
+        PimcoreBundleManager $bundleManager,
+        RouterInterface $router,
+        Packages $package
     ) {
         $this->editmodeResolver = $editmodeResolver;
         $this->documentResolver = $documentResolver;
         $this->userLoader = $userLoader;
         $this->bundleManager = $bundleManager;
+        $this->router = $router;
+        $this->package = $package;
     }
 
     /**
@@ -218,14 +234,12 @@ class EditmodeListener implements EventSubscriberInterface
 
     /**
      * @param Document $document
-     * @param User $user
      * @param string $language
      *
      * @return string
      */
     protected function buildHeadHtml(Document $document, $language)
     {
-        $config = Config::getSystemConfig();
         $libraries = $this->getEditmodeLibraries();
         $scripts = $this->getEditmodeScripts();
         $stylesheets = $this->getEditmodeStylesheets();
@@ -260,15 +274,20 @@ class EditmodeListener implements EventSubscriberInterface
                 $scriptContents .= file_get_contents(PIMCORE_WEB_ROOT . $scriptUrl) . "\n\n\n";
             }
 
-            $headHtml .= '<script src="' . \Pimcore\Tool\Admin::getMinimizedScriptPath($scriptContents) . '"></script>' . "\n";
+            $headHtml .= '<script src="' . $this->router->generate('pimcore_admin_misc_scriptproxy', \Pimcore\Tool\Admin::getMinimizedScriptPath($scriptContents, false)) . '"></script>' . "\n";
         }
+        $path = $this->router->generate('pimcore_admin_misc_jsontranslationssystem', [
+            'language' => $language,
+            '_dc' => Version::getRevision()
+        ]);
 
-        $headHtml .= '<script src="/admin/misc/json-translations-system?language=' . $language . '&_dc=' . Version::getRevision() . '"></script>' . "\n";
+        $headHtml .= '<script src="'.$path.'"></script>' . "\n";
+        $headHtml .= '<script src="' . $this->router->generate('fos_js_routing_js', ['callback' => 'fos.Router.setData']) . '"></script>' . "\n";
         $headHtml .= "\n\n";
 
         // set var for editable configurations which is filled by Document\Tag::admin()
         $headHtml .= '<script>
-            var editableConfigurations = new Array();
+            var editableConfigurations = [];
             var pimcore_document_id = ' . $document->getId() . ';
         </script>';
 
@@ -299,6 +318,7 @@ class EditmodeListener implements EventSubscriberInterface
     {
         return array_merge(
             [
+                $this->package->getUrl('bundles/fosjsrouting/js/router.js'),
                 '/bundles/pimcoreadmin/js/pimcore/functions.js',
                 '/bundles/pimcoreadmin/js/pimcore/overrides.js',
                 '/bundles/pimcoreadmin/js/pimcore/tool/milestoneslider.js',

@@ -71,6 +71,7 @@ class Block extends Model\Document\Tag implements BlockInterface
     public function admin()
     {
         // nothing to do
+        return '';
     }
 
     /**
@@ -79,7 +80,7 @@ class Block extends Model\Document\Tag implements BlockInterface
     public function frontend()
     {
         // nothing to do
-        return null;
+        return '';
     }
 
     /**
@@ -347,16 +348,14 @@ class Block extends Model\Document\Tag implements BlockInterface
     }
 
     /**
-     * @param Model\Webservice\Data\Document\Element $wsElement
-     * @param null $document
-     * @param mixed $params
-     * @param null $idMapper
+     * @deprecated
      *
-     * @return Model\Webservice\Data\Document\Element|void
+     * @param Model\Webservice\Data\Document\Element $wsElement
+     * @param Model\Document\PageSnippet $document
+     * @param array $params
+     * @param Model\Webservice\IdMapperInterface|null $idMapper
      *
      * @throws \Exception
-     *
-     * @todo replace and with &&
      */
     public function getFromWebserviceImport($wsElement, $document = null, $params = [], $idMapper = null)
     {

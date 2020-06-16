@@ -14,6 +14,9 @@
 
 namespace Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Worker\ElasticSearch;
 
+use Elasticsearch\Common\Exceptions\BadRequest400Exception;
+use Elasticsearch\Common\Exceptions\Missing404Exception;
+use Elasticsearch\Common\Exceptions\NoNodesAvailableException;
 use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Config\ElasticSearch;
 use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Config\ElasticSearchConfigInterface;
 use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Interpreter\RelationInterpreterInterface;
@@ -22,16 +25,19 @@ use Pimcore\Bundle\EcommerceFrameworkBundle\IndexService\Worker;
 use Pimcore\Bundle\EcommerceFrameworkBundle\Model\IndexableInterface;
 use Pimcore\Db\ConnectionInterface;
 use Pimcore\Logger;
+use Pimcore\Model\Tool\Lock;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * @property ElasticSearch $tenantConfig
  */
-abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker implements Worker\BatchProcessingWorkerInterface
+abstract class AbstractElasticSearch extends Worker\ProductCentricBatchProcessingWorker implements Worker\BatchProcessingWorkerInterface
 {
     const STORE_TABLE_NAME = 'ecommerceframework_productindex_store_elastic';
-    const MOCKUP_CACHE_PREFIX = 'ecommerce_mockup_elastic';
 
     const RELATION_FIELD = 'parentchildrelation';
+
+    const REINDEXING_LOCK_KEY = 'elasticsearch_reindexing_lock';
 
     /**
      * Default value for the mapping of custom attributes
@@ -54,11 +60,11 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     protected $indexName;
 
     /**
-     * The Version number of the Index (we increas the Version number if the mapping cant be changed (reindexing process))
+     * The Version number of the Index (we increase the Version number if the mapping cant be changed (reindexing process))
      *
      * @var int
      */
-    protected $indexVersion = 0;
+    protected $indexVersion = null;
 
     /**
      * @var array
@@ -66,15 +72,21 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     protected $bulkIndexData = [];
 
     /**
-     * @param ElasticSearch|ElasticSearchConfigInterface $tenantConfig
-     * @param ConnectionInterface $db
+     * @var array
      */
-    public function __construct(ElasticSearchConfigInterface $tenantConfig, ConnectionInterface $db)
+    protected $indexStoreMetaData = [];
+
+    /**
+     * @param ElasticSearchConfigInterface $tenantConfig
+     * @param ConnectionInterface $db
+     * @param EventDispatcherInterface $eventDispatcher
+     * @param string|null $workerMode
+     */
+    public function __construct(ElasticSearchConfigInterface $tenantConfig, ConnectionInterface $db, EventDispatcherInterface $eventDispatcher, string $workerMode = null)
     {
-        parent::__construct($tenantConfig, $db);
+        parent::__construct($tenantConfig, $db, $eventDispatcher, $workerMode);
 
         $this->indexName = ($tenantConfig->getClientConfig('indexName')) ? strtolower($tenantConfig->getClientConfig('indexName')) : strtolower($this->name);
-        $this->determineAndSetCurrentIndexVersion();
     }
 
     /**
@@ -97,34 +109,18 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
         $this->storeCustomAttributes = $storeCustomAttributes;
     }
 
-    protected function getVersionFile()
-    {
-        return PIMCORE_PRIVATE_VAR . '/ecommerce/elasticsearch-index-version-' . $this->indexName.'.txt';
-    }
-
-    /**
-     * determines and sets the current index version
-     */
-    protected function determineAndSetCurrentIndexVersion()
-    {
-        $version = $this->getIndexVersion();
-        if (is_readable($this->getVersionFile())) {
-            $version = (int)trim(file_get_contents($this->getVersionFile()));
-        } else {
-            \Pimcore\File::mkdir(dirname($this->getVersionFile()));
-            file_put_contents($this->getVersionFile(), $this->getIndexVersion());
-        }
-        $this->indexVersion = $version;
-    }
-
     /**
      * the versioned index-name
      *
-     * @return string
+     * @param int $indexVersionOverride if set, then the index name for a specific index version is built. example. 13
+     *
+     * @return string the name of the index, such as at_de_elastic_13
      */
-    public function getIndexNameVersion()
+    public function getIndexNameVersion(int $indexVersionOverride = null)
     {
-        return $this->indexName . '-' . $this->getIndexVersion();
+        $indexVersion = $indexVersionOverride ?? $this->getIndexVersion();
+
+        return $this->indexName . '-' . $indexVersion;
     }
 
     /**
@@ -132,6 +128,30 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
      */
     public function getIndexVersion()
     {
+        if ($this->indexVersion === null) {
+            $this->indexVersion = 0;
+            $esClient = $this->getElasticSearchClient();
+
+            try {
+                $result = $esClient->indices()->getAlias([
+                    'name' => $this->indexName
+                ]);
+
+                if (is_array($result)) {
+                    $aliasIndexName = array_key_first($result);
+                    preg_match('/'.$this->indexName.'-(\d+)/', $aliasIndexName, $matches);
+                    if (is_array($matches) && count($matches) > 1) {
+                        $version = (int)$matches[1];
+                        if ($version > $this->indexVersion) {
+                            $this->indexVersion = $version;
+                        }
+                    }
+                }
+            } catch (Missing404Exception $e) {
+                $this->indexVersion = 0;
+            }
+        }
+
         return $this->indexVersion;
     }
 
@@ -168,7 +188,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     /**
      * creates or updates necessary index structures (like database tables and so on)
      *
-     * @return void
+     * @throws \Exception
      */
     public function createOrUpdateIndexStructures()
     {
@@ -240,7 +260,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
                     $mapping['store'] = false;
                 }
 
-                if ($type == 'object') {
+                if ($type == 'object' || $type == 'nested') {
                     unset($mapping['store']);
                 }
 
@@ -264,6 +284,8 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     /**
      * creates mapping attributes based on system attributes, in product index defined attributes and relations
      * can be overwritten in order to consider additional mappings for sub tenants
+     *
+     * @param bool $includeTypes
      *
      * @return array
      */
@@ -295,7 +317,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
      *
      * @param IndexableInterface $object
      *
-     * @return void
+     * @throws \Exception
      */
     public function deleteFromIndex(IndexableInterface $object)
     {
@@ -319,7 +341,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
      *
      * @param IndexableInterface $object
      *
-     * @return void
+     * @throws \Throwable
      */
     public function updateIndex(IndexableInterface $object)
     {
@@ -329,67 +351,32 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
             return;
         }
 
-        $this->prepareDataForIndex($object);
+        $subObjectIds = $this->prepareDataForIndex($object);
 
         //updates data for all subentries
-        $subObjectIds = $this->tenantConfig->createSubIdsForObject($object);
         foreach ($subObjectIds as $subObjectId => $object) {
             $this->doUpdateIndex($subObjectId);
         }
 
-        $this->commitUpdateIndex();
-
-        $this->fillupPreparationQueue($object);
-    }
-
-    /**
-     * If a variant is moved from one parent to another one the original document needs to be deleted as otherwise the variant will be stored twice in the index
-     *
-     * @param array $indexSystemData
-     * @param int $objectid
-     */
-    protected function deleteMovedParentRelations($indexSystemData)
-    {
-        $esClient = $this->getElasticSearchClient();
-
-        $variants = $esClient->search([
-            'index' => $this->getIndexNameVersion(),
-            'type' => ProductListInterface::PRODUCT_TYPE_VARIANT,
-            'body' => [
-                '_source' => false,
-                'query' => [
-                    'bool' => [
-                        'must' => [
-                            'term' => [
-                                'system.o_id' => $indexSystemData['o_id']
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ]);
-
-        $hits = $variants['hits']['hits'] ?? [];
-
-        foreach ($hits as $hit) {
-            if ($hit['_parent'] != $indexSystemData['o_virtualProductId']) {
-                $params = [
-                    'index' => $this->getIndexNameVersion(),
-                    'type' => ProductListInterface::PRODUCT_TYPE_VARIANT,
-                    'id' => $indexSystemData['o_id'],
-                    'parent' => $hit['_parent']
-                ];
-                $esClient->delete($params);
-            }
+        if (count($subObjectIds) > 0) {
+            $this->commitBatchToIndex();
+            $this->fillupPreparationQueue($object);
         }
     }
 
-    protected function doUpdateIndex($objectId, $data = null)
+    protected function doUpdateIndex($objectId, $data = null, $metadata = null)
     {
+        $isLocked = $this->checkIndexLock(false);
+
+        if ($isLocked) {
+            return;
+        }
+
         if (empty($data)) {
-            $data = $this->db->fetchOne('SELECT data FROM ' . $this->getStoreTableName() . ' WHERE o_id = ? AND tenant = ?', [$objectId, $this->name]);
-            if ($data) {
-                $data = json_decode($data, true);
+            $dataEntry = $this->db->fetchRow('SELECT data, metadata FROM ' . $this->getStoreTableName() . ' WHERE o_id = ? AND tenant = ?', [$objectId, $this->name]);
+            if ($dataEntry) {
+                $data = json_decode($dataEntry['data'], true);
+                $metadata = $dataEntry['metadata'];
 
                 $jsonDecodeError = json_last_error();
                 if ($jsonDecodeError !== JSON_ERROR_NONE) {
@@ -404,6 +391,8 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
             $indexSystemData = [];
             $indexAttributeData = [];
             $indexRelationData = [];
+
+            $data = $this->doPreIndexDataModification($data);
 
             //add system and index attributes
             foreach ($data['data'] as $dataKey => $dataEntry) {
@@ -425,13 +414,18 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
                 $indexRelationData[$relation['fieldname']][] = $relation['dest'];
             }
 
-            $data = $this->doPreIndexDataModification($data);
-
             //check if parent should exist and if so, consider parent relation at indexing
             $routingId = $indexSystemData['o_type'] == ProductListInterface::PRODUCT_TYPE_VARIANT ? $indexSystemData['o_virtualProductId'] : $indexSystemData['o_id'];
 
+            if ($metadata !== null && $routingId != $metadata) {
+                //routing has changed, need to delete old ES entry
+                $this->bulkIndexData[] = ['delete' => ['_index' => $this->getIndexNameVersion(), '_type' => $this->getTenantConfig()->getElasticSearchClientParams()['indexType'], '_id' => $objectId, '_routing' => $metadata]];
+            }
+
             $this->bulkIndexData[] = ['index' => ['_index' => $this->getIndexNameVersion(), '_type' => $this->getTenantConfig()->getElasticSearchClientParams()['indexType'], '_id' => $objectId, '_routing' => $routingId]];
-            $bulkIndexData = array_filter(['system' => array_filter($indexSystemData), 'type' => $indexSystemData['o_type'], 'attributes' => array_filter($indexAttributeData), 'relations' => $indexRelationData, 'subtenants' => $data['subtenants']]);
+            $bulkIndexData = array_filter(['system' => array_filter($indexSystemData), 'type' => $indexSystemData['o_type'], 'attributes' => array_filter($indexAttributeData, function ($value) {
+                return $value !== null;
+            }), 'relations' => $indexRelationData, 'subtenants' => $data['subtenants']]);
 
             if ($indexSystemData['o_type'] == ProductListInterface::PRODUCT_TYPE_VARIANT) {
                 $bulkIndexData[self::RELATION_FIELD] = ['name' => $indexSystemData['o_type'], 'parent' => $indexSystemData['o_virtualProductId']];
@@ -439,9 +433,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
                 $bulkIndexData[self::RELATION_FIELD] = ['name' => $indexSystemData['o_type']];
             }
             $this->bulkIndexData[] = $bulkIndexData;
-
-            //save new indexed element to mockup cache
-            $this->saveToMockupCache($objectId, $data);
+            $this->indexStoreMetaData[$objectId] = $routingId;
         }
     }
 
@@ -449,7 +441,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
      * override this method if you need to add custom data
      * which should not be stored in the store data
      *
-     * @param $data
+     * @param array|string $data
      *
      * @return mixed
      */
@@ -461,7 +453,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     /**
      * actually sending data to elastic search
      */
-    protected function commitUpdateIndex()
+    public function commitBatchToIndex(): void
     {
         if (sizeof($this->bulkIndexData)) {
             $esClient = $this->getElasticSearchClient();
@@ -471,28 +463,54 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
 
             // save update status
             foreach ($responses['items'] as $response) {
-                $data = [
-                    'update_status' => $response['index']['status'],
-                    'update_error' => null,
-                ];
-                if (isset($response['index']['error']) && $response['index']['error']) {
-                    $data['update_error'] = json_encode($response['index']['error']);
-                    $data['crc_index'] = 0;
-                    Logger::error('Failed to Index Object with Id:' . $response['index']['_id']);
+                $operation = null;
+                if (isset($response['index'])) {
+                    $operation = 'index';
+                } elseif (isset($response['delete'])) {
+                    $operation = 'delete';
                 }
 
-                $this->db->updateWhere($this->getStoreTableName(), $data, 'o_id = ' . $this->db->quote($response['index']['_id']));
+                if ($operation) {
+                    $data = [
+                        'update_status' => $response[$operation]['status'],
+                        'update_error' => null,
+                        'metadata' => isset($this->indexStoreMetaData[$response[$operation]['_id']]) ? $this->indexStoreMetaData[$response[$operation]['_id']] : null
+                    ];
+                    if (isset($response[$operation]['error']) && $response[$operation]['error']) {
+                        $data['update_error'] = json_encode($response[$operation]['error']);
+                        $data['crc_index'] = 0;
+                        Logger::error(
+                            'Failed to Index Object with Id:' . $response[$operation]['_id'],
+                            json_decode($data['update_error'], true)
+                        );
+
+                        $this->db->updateWhere(
+                            $this->getStoreTableName(),
+                            $data,
+                            'o_id = ' . $this->db->quote($response[$operation]['_id']) . ' AND tenant = ' . $this->db->quote($this->name)
+                        );
+                    } else {
+
+                        //update crc sums in store table to mark element as indexed
+                        $this->db->query(
+                            'UPDATE ' . $this->getStoreTableName() . ' SET crc_index = crc_current, update_status = ?, update_error = ?, metadata = ? WHERE o_id = ? and tenant = ?',
+                            [$data['update_status'], $data['update_error'], $data['metadata'], $response[$operation]['_id'], $this->name]
+                        );
+                    }
+                } else {
+                    throw new \Exception('Unkown operation in response: ' . print_r($response, true));
+                }
             }
         }
 
         // reset
         $this->bulkIndexData = [];
-
-        //check for eventual resetting re-index mode
-        $this->completeReindexMode();
+        $this->indexStoreMetaData = [];
     }
 
     /**
+     * @deprecated
+     *
      * first run processUpdateIndexQueue of trait and then commit updated entries
      *
      * @param int $limit
@@ -503,7 +521,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     {
         $entriesUpdated = parent::processUpdateIndexQueue($limit);
         Logger::info('Entries updated:' . $entriesUpdated);
-        $this->commitUpdateIndex();
+        $this->commitBatchToIndex();
 
         return $entriesUpdated;
     }
@@ -511,95 +529,6 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
     protected function getStoreTableName()
     {
         return self::STORE_TABLE_NAME;
-    }
-
-    protected function getMockupCachePrefix()
-    {
-        return self::MOCKUP_CACHE_PREFIX;
-    }
-
-    /**
-     * starts reindex mode for index
-     * - new index with new version is created
-     * - complete store table for current tenant is resetted in order to recreate a new index version
-     *
-     * while in reindex mode
-     * - all index updates are stored into the new index version
-     * - no index structure updates are allowed
-     *
-     */
-    public function startReindexMode()
-    {
-        //make sure reindex mode can only be started once
-        if ($this->isInReindexMode()) {
-            throw new \Exception('For given tenant ' . $this->name . ' system is already in reindex mode - cannot be started once more.');
-        }
-
-        // increment version and recreate index structures
-        $this->indexVersion++;
-        Logger::info('Index-Actions - Start Reindex Mode - Version Number: ' . $this->indexVersion.' Index Name: ' . $this->getIndexNameVersion());
-
-        //set the new version here so other processes write in the new index
-        $result = file_put_contents($this->getVersionFile(), $this->indexVersion);
-        if (!$result) {
-            throw new \Exception("Can't write version file: " . $this->getVersionFile());
-        }
-        // reset indexing queue in order to initiate a full re-index to the new index version
-        $this->resetIndexingQueue();
-    }
-
-    /**
-     * checks if system is in reindex mode based on index version and ES alias
-     *
-     * @return bool
-     *
-     * @throws \Exception
-     */
-    protected function isInReindexMode()
-    {
-        $currentIndexName = $this->fetchEsActiveIndex();
-        if (empty($currentIndexName)) {
-            throw new \Exception('Index alias with name ' . $this->indexName . ' not found! ');
-        }
-
-        $currentIndexVersion = str_replace($this->indexName . '-', '', $currentIndexName);
-
-        if ($currentIndexVersion < $this->getIndexVersion()) {
-            Logger::info('Index-Actions - currently in reindex mode for ' . $this->indexName);
-
-            return true;
-        } elseif ($currentIndexVersion == $this->getIndexVersion()) {
-            Logger::info('Index-Actions - currently NOT in reindex mode for ' . $this->indexName);
-
-            return false;
-        } else {
-            throw new \Exception('Index-Actions - something weird happened - CurrentIndexVersion of Alias is bigger than IndexVersion in File: ' . $currentIndexVersion . ' vs. ' . $this->getIndexVersion());
-        }
-    }
-
-    /**
-     * checks if there are some entries in the store table left for indexing
-     * if not -> re-index is finished
-     *
-     * @throws \Exception
-     */
-    protected function completeReindexMode()
-    {
-        if ($this->isInReindexMode()) {
-            Logger::info('Index-Actions - in completeReindexMode');
-
-            // check if all entries are updated
-            $query = 'SELECT EXISTS(SELECT 1 FROM ' . $this->getStoreTableName() . ' WHERE tenant = ? AND (in_preparation_queue = 1 OR crc_current != crc_index) LIMIT 1);';
-            $result = $this->db->fetchOne($query, [$this->name]);
-
-            if ($result == 0) {
-                //no entries left --> re-index is finished
-                $this->switchIndexAlias();
-            } else {
-                //there are entries left --> re-index not finished yet
-                Logger::info('Index-Actions - Re-Indexing is not finished, still re-indexing for version number: ' . $this->indexVersion);
-            }
-        }
     }
 
     /**
@@ -635,14 +564,21 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
         }
 
         //delete old indices
+        $this->cleanupUnusedEsIndices();
+    }
+
+    protected function cleanupUnusedEsIndices(): void
+    {
+        $esClient = $this->getElasticSearchClient();
         $stats = $esClient->indices()->stats();
         foreach ($stats['indices'] as $key => $data) {
             preg_match('/'.$this->indexName.'-(\d+)/', $key, $matches);
-            if (!is_null($matches[1])) {
+            if (is_array($matches) && count($matches) > 1) {
                 $version = (int)$matches[1];
                 if ($version != $this->indexVersion) {
-                    Logger::info('Index-Actions - Delete old Index ' . $this->indexName.'-'.$version);
-                    $esClient->indices()->delete(['index' => $this->indexName.'-'.$version]);
+                    $indexNameVersion = $this->getIndexNameVersion($version);
+                    Logger::info('Index-Actions - Delete old Index ' . $indexNameVersion);
+                    $this->deleteEsIndexIfExisting($indexNameVersion);
                 }
             }
         }
@@ -653,7 +589,7 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
      *
      * return array in this case
      *
-     * @param $data
+     * @param array|string $data
      *
      * @return string
      */
@@ -662,12 +598,23 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
         return $data;
     }
 
+    /**
+     * @param int $objectId
+     * @param IndexableInterface|null $object
+     *
+     * @throws \Exception
+     */
     protected function doDeleteFromIndex($objectId, IndexableInterface $object = null)
     {
         $esClient = $this->getElasticSearchClient();
 
         $storeEntry = \Pimcore\Db::get()->fetchRow('SELECT * FROM ' . $this->getStoreTableName() . ' WHERE  o_id=? AND tenant=? ', [$objectId, $this->getTenantConfig()->getTenantName()]);
         if ($storeEntry) {
+            $isLocked = $this->checkIndexLock(false);
+            if ($isLocked) {
+                throw new \Exception('Delete not possible due to product index lock. Please re-try later.');
+            }
+
             try {
                 $esClient->delete([
                     'index' => $this->getIndexNameVersion(),
@@ -677,17 +624,18 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
                 ]);
             } catch (\Exception $e) {
                 //if \Elasticsearch\Common\Exceptions\Missing404Exception <- the object is not in the index so its ok.
-                if ($e instanceof \Elasticsearch\Common\Exceptions\Missing404Exception == false) {
+                if ($e instanceof Missing404Exception == false) {
                     throw $e;
                 }
             }
             $this->deleteFromStoreTable($objectId);
-            $this->deleteFromMockupCache($objectId);
         }
     }
 
-    protected function doCreateOrUpdateIndexStructures($exceptionOnFailure = false)
+    protected function doCreateOrUpdateIndexStructures()
     {
+        $this->checkIndexLock(true);
+
         $this->createOrUpdateStoreTable();
 
         $esClient = $this->getElasticSearchClient();
@@ -698,27 +646,37 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
             $indexName = $this->getIndexNameVersion();
             $this->createEsIndex($indexName);
 
-            //index didn't exist -> reset index queue to make sure all products get reindexed
+            //index didn't exist -> reset index queue to make sure all products get re-indexed
             $this->resetIndexingQueue();
 
             $this->createEsAliasIfMissing();
         }
 
-        $params = $this->getMappingParams();
-
         try {
-            $result = $esClient->indices()->putMapping($params);
-            Logger::info('Index-Actions - updated Mapping for Index: ' . $this->getIndexNameVersion());
-        } catch (\Exception $e) {
-            Logger::info($e->getMessage());
+            $this->putIndexMapping($this->getIndexNameVersion());
 
-            if ($exceptionOnFailure) {
-                throw new \Exception("Can't create Mapping - Exiting to prevent infinite loop. Message: " . $e->getMessage());
-            } else {
-                //when update mapping fails, start reindex mode
-                $this->startReindexMode();
-                $this->doCreateOrUpdateIndexStructures(true);
+            $configuredSettings = $this->tenantConfig->getIndexSettings();
+            $currentSettings = $esClient->indices()->getSettings([
+                'index' => $this->getIndexNameVersion(),
+            ]);
+            $currentSettings = $currentSettings[$this->getIndexNameVersion()]['settings']['index'];
+
+            $settingsIntersection = array_intersect_key($currentSettings, $configuredSettings);
+            if ($settingsIntersection != $configuredSettings) {
+                $esClient->indices()->putSettings([
+                    'index' => $this->getIndexNameVersion(),
+                    'body' => [
+                        'index' => $this->tenantConfig->getIndexSettings()
+                    ]
+                ]);
             }
+
+            Logger::info('Index-Actions - updated settings for Index: ' . $this->getIndexNameVersion());
+        } catch (\Exception $e) {
+            Logger::info("Index-Actions - can't create Mapping - trying reindexing " . $e->getMessage());
+            Logger::info('Index-Actions - Perform native reindexing for Index: ' . $this->getIndexNameVersion());
+
+            $this->startReindexMode();
         }
 
         // index created return "true" and mapping creation returns array
@@ -812,13 +770,180 @@ abstract class AbstractElasticSearch extends Worker\AbstractMockupCacheWorker im
         if (!$result['acknowledged']) {
             throw new \Exception('Index creation failed. IndexName: ' . $indexName);
         }
+    }
+
+    /**
+     * puts current mapping to index with given name
+     *
+     * @param string $indexName
+     *
+     * @throws \Exception
+     */
+    protected function putIndexMapping(string $indexName)
+    {
+        $esClient = $this->getElasticSearchClient();
 
         $params = $this->getMappingParams();
-        $params['index'] = $indexName; //important
+        $params['index'] = $indexName;
         $result = $esClient->indices()->putMapping($params);
 
         if (!$result['acknowledged']) {
-            throw new \Exception('Index creation failed. IndexName: ' . $indexName);
+            throw new \Exception('Putting mapping to index failed. IndexName: ' . $indexName);
         }
+
+        Logger::info('Index-Actions - updated Mapping for Index: ' . $indexName);
+    }
+
+    /**
+     * Delete an ES index if existing.
+     *
+     * @param string $indexName the name of the index.
+     */
+    protected function deleteEsIndexIfExisting(string $indexName)
+    {
+        $esClient = $this->getElasticSearchClient();
+        $result = $esClient->indices()->exists(['index' => $indexName]);
+        if ($result) {
+            Logger::info('Deleted index '.$indexName.'.');
+            $result = $esClient->indices()->delete(['index' => $indexName]);
+            if (!array_key_exists('acknowledged', $result) && !$result['acknowledged']) {
+                Logger::error("Could not delete index {$indexName} while cleanup. Please remove the index manually.");
+            }
+        }
+    }
+
+    /**
+     * Get the next index version, e.g. if currently 13, then 14 will be returned.
+     *
+     * @return int
+     */
+    protected function getNextIndexVersion(): int
+    {
+        return $this->getIndexVersion() + 1;
+    }
+
+    /**
+     * Copy an existing ES sourceIndex into an existing ES targetIndex.
+     * Precondition: both ES indices must already exist.
+     *
+     * @param string $sourceIndexName the name of the source index in ES.
+     * @param string $targetIndexName the name of the target index in ES. If existing, will be deleted
+     *
+     * @throws BadRequest400Exception
+     * @throws NoNodesAvailableException
+     */
+    protected function performReindex(string $sourceIndexName, string $targetIndexName)
+    {
+        $esClient = $this->getElasticSearchClient();
+
+        $sourceIndexName = strtolower($sourceIndexName);
+        $targetIndexName = strtolower($targetIndexName);
+
+        $body =
+            [
+                'source' => [
+                    'index' => $sourceIndexName
+
+                ],
+                'dest' => [
+                    'index' => $targetIndexName,
+                ]
+            ];
+
+        $startTime = time();
+        Logger::info('Start reindexing process in Elastic Search...', [
+            'sourceIndexName' => $sourceIndexName,
+            'targetIndexName' => $targetIndexName,
+            'method' => 'POST',
+            'uri' => '/_reindex',
+            'body' => $body
+        ]);
+
+        $esClient->reindex([
+            'body' => $body
+        ]);
+
+        Logger::info(sprintf('Completed re-index in %.02f seconds.', (time() - $startTime)));
+    }
+
+    /**
+     * Performs native reindexing in ES
+     * - new index with new version is created
+     * - data is copied from old index to new index
+     *
+     * While in reindex
+     * - all index updates are stored into store table only, and transferred with next ecommerce:indexservice:process-queue update-index
+     * - no index structure updates are allowed
+     *
+     * @throws BadRequest400Exception
+     * @throws NoNodesAvailableException
+     */
+    public function startReindexMode()
+    {
+        try {
+            $this->activateIndexLock(); //lock all other processes
+
+            $currentIndexName = $this->getIndexNameVersion();
+            $nextIndex = $this->getNextIndexVersion();
+            $nextIndexName = $this->getIndexNameVersion($nextIndex);
+
+            $this->deleteEsIndexIfExisting($nextIndexName);
+            $this->createEsIndex($nextIndexName);
+            $this->putIndexMapping($nextIndexName);
+
+            $this->performReindex($currentIndexName, $nextIndexName);
+
+            $this->indexVersion = $nextIndex;
+
+            $this->switchIndexAlias();
+        } finally {
+            $this->releaseIndexLock();
+        }
+    }
+
+    /**
+     * @var int
+     */
+    protected $lastLockLogTimestamp = 0;
+
+    /**
+     * Verify if the index is currently locked.
+     *
+     * @param bool $throwException if set to false then no exception will be thrown if index is locked
+     *
+     * @return bool returns true if no exception is thrown and the index is locked
+     *
+     * @throws \Exception
+     */
+    protected function checkIndexLock(bool $throwException = true): bool
+    {
+        if (Lock::isLocked(self::REINDEXING_LOCK_KEY, 60 * 10)) {  //lock expires after 10 minutes.
+
+            $errorMessage = sprintf('Index is currently locked by "%s" as reindex is in progress.', self::REINDEXING_LOCK_KEY);
+            if ($throwException) {
+                throw new \Exception($errorMessage);
+            } else {
+                //only write log message once a minute to not spam up log file when running update index
+                if ($this->lastLockLogTimestamp < time() - 60) {
+                    $this->lastLockLogTimestamp = time();
+                    Logger::warning($errorMessage . ' (will suppress subsequent log messages of same type for next 60 seconds)');
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function activateIndexLock()
+    {
+        Lock::lock(self::REINDEXING_LOCK_KEY);
+    }
+
+    protected function releaseIndexLock()
+    {
+        Lock::release(self::REINDEXING_LOCK_KEY);
+        $this->lastLockLogTimestamp = 0;
     }
 }

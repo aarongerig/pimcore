@@ -76,6 +76,8 @@ class Areablock extends Model\Document\Tag implements BlockInterface
 
     /**
      * @see Document\Tag\TagInterface::admin
+     *
+     * @return void
      */
     public function admin()
     {
@@ -84,6 +86,8 @@ class Areablock extends Model\Document\Tag implements BlockInterface
 
     /**
      * @see Document\Tag\TagInterface::frontend
+     *
+     * @return void
      */
     public function frontend()
     {
@@ -95,7 +99,7 @@ class Areablock extends Model\Document\Tag implements BlockInterface
     }
 
     /**
-     * @param $index
+     * @param int $index
      */
     public function renderIndex($index)
     {
@@ -192,7 +196,7 @@ class Areablock extends Model\Document\Tag implements BlockInterface
             }
         }
 
-        if ($options['globalParams']) {
+        if (isset($options['globalParams'])) {
             $params = array_merge($options['globalParams'], (array)$params);
         }
 
@@ -574,10 +578,12 @@ class Areablock extends Model\Document\Tag implements BlockInterface
     }
 
     /**
+     * @deprecated
+     *
      * @param Model\Webservice\Data\Document\Element $wsElement
-     * @param $document
-     * @param mixed $params
-     * @param null $idMapper
+     * @param Model\Document\PageSnippet $document
+     * @param array $params
+     * @param Model\Webservice\IdMapperInterface|null $idMapper
      *
      * @throws \Exception
      */

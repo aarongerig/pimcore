@@ -1,5 +1,5 @@
 <?php
-/** @var $view \Pimcore\Templating\PhpEngine */
+/** @var \Pimcore\Templating\PhpEngine $view */
 $view->extend('PimcoreAdminBundle:Admin/Login:layout.html.php');
 
 $this->get("translate")->setDomain("admin");
@@ -27,7 +27,7 @@ if ($browser->getBrowser() == \Pimcore\Browser::BROWSER_OPERA && $browserVersion
 
 
 <div id="loginform">
-    <form method="post" action="<?= $view->router()->path('pimcore_admin_login_check', ['perspective' => strip_tags($view->request()->getParameter('perspective'))]) ?>" autocomplete="off">
+    <form method="post" action="<?= $view->router()->path('pimcore_admin_login_check', ['perspective' => strip_tags($view->request()->getParameter('perspective'))]) ?>">
 
         <?php if ($this->error) { ?>
             <div class="text error">
@@ -35,8 +35,8 @@ if ($browser->getBrowser() == \Pimcore\Browser::BROWSER_OPERA && $browserVersion
             </div>
         <?php } ?>
 
-        <input type="text" name="username" placeholder="<?= $this->translate("Username"); ?>" required autofocus/>
-        <input type="password" name="password" placeholder="<?= $this->translate("Password"); ?>" required/>
+        <input type="text" name="username" autocomplete="username" placeholder="<?= $this->translate("Username"); ?>" required autofocus>
+        <input type="password" name="password" autocomplete="current-password" placeholder="<?= $this->translate("Password"); ?>" required>
         <input type="hidden" name="csrfToken" value="<?= $this->csrfToken ?>">
 
         <button type="submit"><?= $this->translate("Login"); ?></button>
@@ -91,3 +91,5 @@ if ($browser->getBrowser() == \Pimcore\Browser::BROWSER_OPERA && $browserVersion
 </script>
 
 <?php $view->slots()->stop() ?>
+
+<?= $this->breachAttackRandomContent(); ?>

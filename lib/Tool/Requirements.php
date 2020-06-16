@@ -368,18 +368,6 @@ class Requirements
             'state' => $wkhtmltopdfBin ? Check::STATE_OK : Check::STATE_WARNING
         ]);
 
-        // HTML2TEXT BIN
-        try {
-            $html2textBin = (bool) \Pimcore\Mail::determineHtml2TextIsInstalled();
-        } catch (\Exception $e) {
-            $html2textBin = false;
-        }
-
-        $checks[] = new Check([
-            'name' => 'html2text (mbayer)',
-            'state' => $html2textBin ? Check::STATE_OK : Check::STATE_WARNING
-        ]);
-
         // ghostscript BIN
         try {
             $ghostscriptBin = (bool) \Pimcore\Document\Adapter\Ghostscript::getGhostscriptCli();
@@ -564,7 +552,7 @@ class Requirements
         $checks[] = new Check([
             'name' => 'Multibyte String (mbstring)',
             'link' => 'http://www.php.net/mbstring',
-            'state' => function_exists('mb_get_info') ? Check::STATE_OK : Check::STATE_ERROR,
+            'state' => function_exists('mb_strcut') ? Check::STATE_OK : Check::STATE_ERROR,
         ]);
 
         // file_info support
@@ -685,5 +673,20 @@ class Requirements
         }
 
         return $data;
+    }
+
+    /**
+     * @param ConnectionInterface $db
+     *
+     * @return array
+     */
+    public static function checkAll(ConnectionInterface $db): array
+    {
+        return [
+            'checksPHP' => static::checkPhp(),
+            'checksFS' => static::checkFilesystem(),
+            'checksApps' => static::checkExternalApplications(),
+            'checksMySQL' => static::checkMysql($db)
+        ];
     }
 }

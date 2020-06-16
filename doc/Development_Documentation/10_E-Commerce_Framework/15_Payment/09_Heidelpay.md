@@ -311,16 +311,12 @@ public function startPaymentAction(Request $request, Factory $factory, LoggerInt
         $cartManager = $factory->getCartManager();
         $cart = $cartManager->getOrCreateCartByName('cart');
 
-        /**
-         * @var $checkoutManager CheckoutManagerInterface
-         */
+        /** @var CheckoutManagerInterface $checkoutManager */
         $checkoutManager = $factory->getCheckoutManager($cart);
 
         $paymentInfo = $checkoutManager->initOrderPayment();
 
-        /**
-         * @var OnlineShopOrder $order
-         */
+        /** @var OnlineShopOrder $order */
         $order = $paymentInfo->getObject();
 
         $paymentConfig = new HeidelpayRequest();
@@ -381,7 +377,7 @@ public function commitOrderAction(Request $request, Factory $factory, LoggerInte
     $cart = $cartManager->getOrCreateCartByName('cart');
 
     /**
-     * @var $checkoutManager CheckoutManagerInterface
+     * @var CheckoutManagerInterface $checkoutManager
      */
     $checkoutManager = $factory->getCheckoutManager($cart);
 
@@ -409,3 +405,7 @@ public function commitOrderAction(Request $request, Factory $factory, LoggerInte
     return $this->redirectToRoute('shop-checkout-completed');
 }
 ```
+
+## Important Configuration
+Please make sure that `serialize_precision` is set to a very high value, or even better to `-1` in order to prevent rounding issues with the heidelpay php sdk. 
+For details also see https://docs.heidelpay.com/docs/installation#php-configuration

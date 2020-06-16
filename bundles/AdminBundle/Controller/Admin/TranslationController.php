@@ -16,6 +16,7 @@ namespace Pimcore\Bundle\AdminBundle\Controller\Admin;
 
 use Pimcore\Bundle\AdminBundle\Controller\AdminController;
 use Pimcore\File;
+use Pimcore\Localization\LocaleServiceInterface;
 use Pimcore\Logger;
 use Pimcore\Model\DataObject;
 use Pimcore\Model\Document;
@@ -42,13 +43,14 @@ use Symfony\Component\Routing\Annotation\Route;
 class TranslationController extends AdminController
 {
     /**
-     * @Route("/import", methods={"POST"})
+     * @Route("/import", name="pimcore_admin_translation_import", methods={"POST"})
      *
      * @param Request $request
+     * @param LocaleServiceInterface $localeService
      *
      * @return JsonResponse
      */
-    public function importAction(Request $request)
+    public function importAction(Request $request, LocaleServiceInterface $localeService)
     {
         $admin = $request->get('admin');
         $dialect = $request->get('csvSettings', null);
@@ -93,9 +95,9 @@ class TranslationController extends AdminController
 
             foreach ($delta as $item) {
                 $lg = $item['lg'];
-                $currentLocale = \Pimcore::getContainer()->get('pimcore.locale')->findLocale();
+                $currentLocale = $localeService->findLocale();
                 $item['lgname'] = \Locale::getDisplayLanguage($lg, $currentLocale);
-                $item['icon'] = '/admin/misc/get-language-flag?language=' . $lg;
+                $item['icon'] = $this->generateUrl('pimcore_admin_misc_getlanguageflag', ['language' => $lg]);
                 $item['current'] = $item['text'];
                 $enrichedDelta[] = $item;
             }
@@ -112,7 +114,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/upload-import", methods={"POST"})
+     * @Route("/upload-import", name="pimcore_admin_translation_uploadimportfile", methods={"POST"})
      *
      * @param Request $request
      *
@@ -145,7 +147,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/export", methods={"GET"})
+     * @Route("/export", name="pimcore_admin_translation_export", methods={"GET"})
      *
      * @param Request $request
      *
@@ -280,7 +282,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/add-admin-translation-keys", methods={"POST"})
+     * @Route("/add-admin-translation-keys", name="pimcore_admin_translation_addadmintranslationkeys", methods={"POST"})
      *
      * @param Request $request
      *
@@ -324,7 +326,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/translations", methods={"POST"})
+     * @Route("/translations", name="pimcore_admin_translation_translations", methods={"POST"})
      *
      * @param Request $request
      * @param Translator $translator
@@ -352,7 +354,6 @@ class TranslationController extends AdminController
             $data = $this->decodeJson($request->get('data'));
 
             if ($request->get('xaction') == 'destroy') {
-                $data = $this->decodeJson($request->get('data'));
                 $t = $class::getByKey($data['key']);
                 $t->delete();
 
@@ -471,10 +472,12 @@ class TranslationController extends AdminController
 
             return $this->adminJson(['data' => $translations, 'success' => true, 'total' => $list->getTotalCount()]);
         }
+
+        return $this->adminJson(['success' => false]);
     }
 
     /**
-     * @param $translations
+     * @param array $translations
      *
      * @return array
      */
@@ -493,10 +496,10 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @param $joins
-     * @param $list
-     * @param $tableName
-     * @param $filters
+     * @param array $joins
+     * @param Translation\AbstractTranslation\Listing $list
+     * @param string $tableName
+     * @param array $filters
      */
     protected function extendTranslationQuery($joins, $list, $tableName, $filters)
     {
@@ -543,7 +546,7 @@ class TranslationController extends AdminController
 
     /**
      * @param Request $request
-     * @param $tableName
+     * @param string $tableName
      * @param bool $languageMode
      *
      * @return array|null|string
@@ -638,7 +641,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/cleanup", methods={"DELETE"})
+     * @Route("/cleanup", name="pimcore_admin_translation_cleanup", methods={"DELETE"})
      *
      * @param Request $request
      *
@@ -667,7 +670,7 @@ class TranslationController extends AdminController
      */
 
     /**
-     * @Route("/content-export-jobs", methods={"POST"})
+     * @Route("/content-export-jobs", name="pimcore_admin_translation_contentexportjobs", methods={"POST"})
      *
      * @param Request $request
      *
@@ -693,6 +696,8 @@ class TranslationController extends AdminController
                     'type' => $element['type'],
                 ];
 
+                $el = null;
+
                 if ($element['children']) {
                     $el = Element\Service::getElementById($element['type'], $element['id']);
                     $baseClass = ELement\Service::getBaseClassNameForElement($element['type']);
@@ -711,13 +716,36 @@ class TranslationController extends AdminController
                         ($el instanceof DataObject\AbstractObject ? 'o_' : '') . 'path LIKE ?',
                         [$el->getRealFullPath() . ($el->getRealFullPath() != '/' ? '/' : '') . '%']
                     );
-                    $idList = $list->loadIdList();
+                    $childs = $list->load();
 
-                    foreach ($idList as $id) {
-                        $elements[$element['type'] . '_' . $id] = [
-                            'id' => $id,
+                    foreach ($childs as $child) {
+                        $childId = $child->getId();
+                        $elements[$element['type'] . '_' . $childId] = [
+                            'id' => $childId,
                             'type' => $element['type'],
                         ];
+
+                        if (isset($element['relations']) && $element['relations']) {
+                            $childDependencies = $child->getDependencies()->getRequires();
+                            foreach ($childDependencies as $cd) {
+                                if ($cd['type'] == 'object' || $cd['type'] == 'document') {
+                                    $elements[$cd['type'] . '_' . $cd['id']] = $cd;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (isset($element['relations']) && $element['relations']) {
+                    if (!$el instanceof Element\AbstractElement) {
+                        $el = Element\Service::getElementById($element['type'], $element['id']);
+                    }
+
+                    $dependencies = $el->getDependencies()->getRequires();
+                    foreach ($dependencies as $dependency) {
+                        if ($dependency['type'] == 'object' || $dependency['type'] == 'document') {
+                            $elements[$dependency['type'] . '_' . $dependency['id']] = $dependency;
+                        }
                     }
                 }
             }
@@ -738,7 +766,7 @@ class TranslationController extends AdminController
         $elements = array_chunk($elements, $elementsPerJob);
         foreach ($elements as $chunk) {
             $jobs[] = [[
-                'url' => '/admin/translation/' . $type . '-export',
+                'url' => $this->get('router')->getContext()->getBaseUrl() . '/admin/translation/' . $type . '-export',
                 'method' => 'POST',
                 'params' => [
                     'id' => $exportId,
@@ -759,7 +787,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/xliff-export", methods={"POST"})
+     * @Route("/xliff-export", name="pimcore_admin_translation_xliffexport", methods={"POST"})
      *
      * @param Request $request
      * @param ExportServiceInterface $exportService
@@ -790,7 +818,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/xliff-export-download", methods={"GET"})
+     * @Route("/xliff-export-download", name="pimcore_admin_translation_xliffexportdownload", methods={"GET"})
      *
      * @param Request $request
      * @param ExporterInterface $translationExporter
@@ -811,7 +839,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/xliff-import-upload", methods={"POST"})
+     * @Route("/xliff-import-upload", name="pimcore_admin_translation_xliffimportupload", methods={"POST"})
      *
      * @param Request $request
      * @param ImportDataExtractorInterface $importDataExtractor
@@ -831,7 +859,7 @@ class TranslationController extends AdminController
 
         for ($i = 0; $i < $steps; $i++) {
             $jobs[] = [[
-                'url' => '/admin/translation/xliff-import-element',
+                'url' => $this->generateUrl('pimcore_admin_translation_xliffimportelement'),
                 'method' => 'POST',
                 'params' => [
                     'id' => $id,
@@ -853,7 +881,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/xliff-import-element", methods={"POST"})
+     * @Route("/xliff-import-element", name="pimcore_admin_translation_xliffimportelement", methods={"POST"})
      *
      * @param Request $request
      * @param ImportDataExtractorInterface $importDataExtractor
@@ -870,12 +898,17 @@ class TranslationController extends AdminController
 
         try {
             $attributeSet = $importDataExtractor->extractElement($id, $step);
-            $importerService->import($attributeSet);
+            if ($attributeSet) {
+                $importerService->import($attributeSet);
+            } else {
+                Logger::warning(sprintf('Could not resolve element %s', $id));
+            }
         } catch (\Exception $e) {
             Logger::err($e->getMessage());
 
             return $this->adminJson([
-                'success' => false
+                'success' => false,
+                'message' => $e->getMessage()
             ]);
         }
 
@@ -885,7 +918,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/word-export", methods={"POST"})
+     * @Route("/word-export", name="pimcore_admin_translation_wordexport", methods={"POST"})
      *
      * @param Request $request
      *
@@ -893,7 +926,6 @@ class TranslationController extends AdminController
      */
     public function wordExportAction(Request $request)
     {
-        error_reporting(0);
         ini_set('display_errors', 'off');
 
         $id = $this->sanitzeExportId((string)$request->get('id'));
@@ -1043,8 +1075,10 @@ class TranslationController extends AdminController
                 } elseif ($element instanceof DataObject\Concrete) {
                     $hasContent = false;
 
-                    if ($fd = $element->getClass()->getFieldDefinition('localizedfields')) {
-                        $definitions = $fd->getFielddefinitions();
+                    /** @var DataObject\ClassDefinition\Data\Localizedfields|null $fd */
+                    $fd = $element->getClass()->getFieldDefinition('localizedfields');
+                    if ($fd) {
+                        $definitions = $fd->getFieldDefinitions();
 
                         $locale = str_replace('-', '_', $source);
                         if (!Tool::isValidLanguage($locale)) {
@@ -1109,7 +1143,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/word-export-download", methods={"GET"})
+     * @Route("/word-export-download", name="pimcore_admin_translation_wordexportdownload", methods={"GET"})
      *
      * @param Request $request
      *
@@ -1172,7 +1206,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/merge-item", methods={"PUT"})
+     * @Route("/merge-item", name="pimcore_admin_translation_mergeitem", methods={"PUT"})
      *
      * @param Request $request
      *
@@ -1201,7 +1235,7 @@ class TranslationController extends AdminController
     }
 
     /**
-     * @Route("/get-website-translation-languages", methods={"GET"})
+     * @Route("/get-website-translation-languages", name="pimcore_admin_translation_getwebsitetranslationlanguages", methods={"GET"})
      *
      * @param Request $request
      *

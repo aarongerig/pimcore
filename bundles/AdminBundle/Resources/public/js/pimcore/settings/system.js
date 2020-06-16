@@ -21,7 +21,7 @@ pimcore.settings.system = Class.create({
 
     getData: function () {
         Ext.Ajax.request({
-            url: "/admin/settings/get-system",
+            url: Routing.generate('pimcore_admin_settings_getsystem'),
             success: function (response) {
 
                 this.data = Ext.decode(response.responseText);
@@ -146,6 +146,7 @@ pimcore.settings.system = Class.create({
                                 typeAhead: true,
                                 value: this.getValue("general.language"),
                                 queryMode: 'local',
+                                mode: 'local',
                                 listWidth: 100,
                                 //editable: true,     // If typeAhead is enabled the combo must be editable: true -- please change one of those settings.
                                 store: pimcore.globalmanager.get("pimcorelanguages"),
@@ -234,17 +235,17 @@ pimcore.settings.system = Class.create({
                             }, {
                                 xtype: "container",
                                 id: "pimcore_custom_branding_logo",
-                                html: '<img src="/admin/settings/display-custom-logo" />',
+                                html: '<img src="'+Routing.generate('pimcore_settings_display_custom_logo')+'" />',
                             }, {
                                 xtype: "button",
                                 text: t("upload"),
                                 iconCls: "pimcore_icon_upload",
                                 handler: function () {
-                                    pimcore.helpers.uploadDialog("/admin/settings/upload-custom-logo", null,
+                                    pimcore.helpers.uploadDialog(Routing.generate('pimcore_admin_settings_uploadcustomlogo'), null,
                                         function () {
                                             var cont = Ext.getCmp("pimcore_custom_branding_logo");
                                             var date = new Date();
-                                            cont.update('<img src="/admin/settings/display-custom-logo?_dc=' + date.getTime() + '" />');
+                                            cont.update('<img src="'+Routing.generate('pimcore_settings_display_custom_logo', {'_dc': date.getTime()})+'" />');
                                         }.bind(this));
                                 }.bind(this),
                                 flex: 1
@@ -254,12 +255,12 @@ pimcore.settings.system = Class.create({
                                 iconCls: "pimcore_icon_delete",
                                 handler: function () {
                                     Ext.Ajax.request({
-                                        url: "/admin/settings/delete-custom-logo",
+                                        url: Routing.generate('pimcore_admin_settings_deletecustomlogo'),
                                         method: "DELETE",
                                         success: function (response) {
                                             var cont = Ext.getCmp("pimcore_custom_branding_logo");
                                             var date = new Date();
-                                            cont.update('<img src="/admin/settings/display-custom-logo?_dc=' + date.getTime() + '" />');
+                                            cont.update('<img src="' + Routing.generate('pimcore_settings_display_custom_logo', {'_dc': date.getTime()}) + '" />');
                                         }
                                     });
                                 }.bind(this),
@@ -675,7 +676,7 @@ pimcore.settings.system = Class.create({
                                 }
                             }, {
                                 xtype: "checkbox",
-                                fieldLabel: t("show_cookie_notice"),
+                                fieldLabel: t("show_cookie_notice") + "<br><b>DEPRECATED! Will be removed in 7.0</b>",
                                 name: "general.show_cookie_notice",
                                 checked: this.getValue("general.show_cookie_notice")
                             }
@@ -723,11 +724,6 @@ pimcore.settings.system = Class.create({
                                 style: "margin-top: 10px;",
                                 width: 600,
                                 value: "&nbsp;"
-                            }, {
-                                fieldLabel: t('create_redirect_for_moved_renamed_page'),
-                                xtype: "checkbox",
-                                name: "documents.createredirectwhenmoved",
-                                checked: this.getValue("documents.createredirectwhenmoved")
                             }, {
                                 fieldLabel: t("allow_trailing_slash_for_documents"),
                                 xtype: "combo",
@@ -938,14 +934,14 @@ pimcore.settings.system = Class.create({
                             {
                                 fieldLabel: t("cache_enabled"),
                                 xtype: "checkbox",
-                                name: "cache.enabled",
-                                checked: this.getValue("cache.enabled")
+                                name: "full_page_cache.enabled",
+                                checked: this.getValue("full_page_cache.enabled")
                             },
                             {
                                 fieldLabel: t('lifetime'),
                                 xtype: "numberfield",
-                                name: 'cache.lifetime',
-                                value: this.getValue("cache.lifetime"),
+                                name: 'full_page_cache.lifetime',
+                                value: this.getValue("full_page_cache.lifetime"),
                                 width: 350,
                                 step: 100
                             },
@@ -966,11 +962,11 @@ pimcore.settings.system = Class.create({
                                         type: 'memory'
                                     },
                                     fields: ['value'],
-                                    data: this.getValue("cache.excludePatternsArray", true)
+                                    data: this.getValue("full_page_cache.excludePatternsArray", true)
                                 }),
                                 fieldLabel: t('exclude_patterns'),
-                                name: 'cache.excludePatterns',
-                                value: this.getValue("cache.excludePatterns"),
+                                name: 'full_page_cache.excludePatterns',
+                                value: this.getValue("full_page_cache.excludePatterns"),
                                 displayField: 'value',
                                 valueField: 'value',
                                 forceSelection: false,
@@ -986,8 +982,8 @@ pimcore.settings.system = Class.create({
                             },
                             {
                                 fieldLabel: t('cache_disable_cookies'),
-                                name: 'cache.excludeCookie',
-                                value: this.getValue("cache.excludeCookie")
+                                name: 'full_page_cache.excludeCookie',
+                                value: this.getValue("full_page_cache.excludeCookie")
                             }
                         ]
                     },
@@ -1001,6 +997,10 @@ pimcore.settings.system = Class.create({
                         defaultType: 'textfield',
                         defaults: {width: 300},
                         items: [
+                            {
+                                xtype: 'container',
+                                html: "<b>DEPRECATED! Will be removed in 7.0</b>"
+                            },
                             {
                                 fieldLabel: t("webservice_enabled"),
                                 xtype: "checkbox",
@@ -1257,7 +1257,7 @@ pimcore.settings.system = Class.create({
         var values = this.layout.getForm().getFieldValues();
 
         Ext.Ajax.request({
-            url: "/admin/settings/set-system",
+            url: Routing.generate('pimcore_admin_settings_setsystem'),
             method: "PUT",
             params: {
                 data: Ext.encode(values)
